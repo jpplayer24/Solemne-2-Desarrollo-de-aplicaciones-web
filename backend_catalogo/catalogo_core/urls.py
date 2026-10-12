@@ -1,22 +1,20 @@
-"""
-URL configuration for catalogo_core project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path
+from django.http import JsonResponse
+from .db_mongo import check_mongo_connection
+
+def health_check(request):
+    conectado, mensaje = check_mongo_connection()
+    status_code = 200 if conectado else 503
+    return JsonResponse({
+        "servicio": "backend_catalogo",
+        "mongodb": {
+            "conectado": conectado,
+            "mensaje": mensaje
+        }
+    }, status=status_code)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/health/', health_check, name='health_check'),
 ]
