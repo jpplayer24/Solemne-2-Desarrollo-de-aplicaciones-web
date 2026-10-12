@@ -1,22 +1,29 @@
-"""
-URL configuration for gestion_core project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/6.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
 from django.urls import path
+from django.http import JsonResponse
+from django.db import connection
+from django.db.utils import OperationalError
+
+def health_check(request):
+    try:
+        connection.ensure_connection()
+        conectado = True
+        mensaje = "Conexión exitosa a PostgreSQL"
+        status_code = 200
+    except OperationalError as e:
+        conectado = False
+        mensaje = f"Error de conexión a PostgreSQL: {str(e)}"
+        status_code = 503
+
+    return JsonResponse({
+        "servicio": "backend_gestion",
+        "postgresql": {
+            "conectado": conectado,
+            "mensaje": mensaje
+        }
+    }, status=status_code)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/health/', health_check, name='health_check'),
 ]
