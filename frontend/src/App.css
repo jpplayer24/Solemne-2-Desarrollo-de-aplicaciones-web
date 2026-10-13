@@ -182,3 +182,34 @@
     border-right-color: var(--border);
   }
 }
+
+:root {
+  --bg: #f8f9fa;        /* Fondo gris muy claro */
+  --text: #333333;      /* Texto oscuro */
+  --accent: #0056b3;    /* Azul corporativo para los botones */
+}
+
+:root[data-theme="dark"] {
+  --bg: #121212;        /* Fondo casi negro */
+  --text: #e0e0e0;      /* Texto gris claro */
+  --accent: #bb86fc;    /* Morado vibrante */
+}
+
+
+:root[data-theme="nature"] {
+  --bg: #f4f1ea;        /* Fondo arena/beige */
+  --text: #2f4f4f;      /* Texto verde oscuro */
+  --accent: #2e8b57;    /* Botones verde bosque */
+}
+:root[data-theme="contrast"] {
+  --bg: #000000;        /* Negro puro */
+  --text: #00ff00;      /* Verde neón */
+  --accent: #ff00ff;    /* Fucsia brillante */
+}
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.4s ease, color 0.4s ease; 
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
