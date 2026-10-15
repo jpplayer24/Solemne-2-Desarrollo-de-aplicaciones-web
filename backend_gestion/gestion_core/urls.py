@@ -3,6 +3,7 @@ from django.urls import path
 from django.http import JsonResponse
 from django.db import connection
 from django.db.utils import OperationalError
+from usuarios.views import RegistroPublicoView
 
 def health_check(request):
     try:
@@ -26,4 +27,5 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health_check'),
+    path('auth/registro/', RegistroPublicoView.as_view(), name='registro-publico'),
 ]
