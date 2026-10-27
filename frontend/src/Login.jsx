@@ -14,8 +14,8 @@ export default function Login() {
         setEstado('Autenticando...');
         
         setTimeout(() => {
-            if (credenciales.email === 'admin@computines.cl' && credenciales.password === 'admin123') {
-                setEstado('Acceso concedido (Simulación). Redirigiendo a Gestión...');
+            if (credenciales.email === 'admin@dreamhub.cl' && credenciales.password === 'admin123') {
+                setEstado('Acceso concedido. Trabajo en Proceso');
             } else {
                 setEstado('Error: Endpoints de DRF desconectados. Credenciales rechazadas.');
             }
