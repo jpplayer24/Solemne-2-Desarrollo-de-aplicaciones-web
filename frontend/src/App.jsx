@@ -16,13 +16,13 @@ function App() {
     setTheme(e.target.value);
   };
 
-  return (
-    <div className="app-container">
-      <Header theme={theme} handleThemeChange={handleThemeChange} />
-      
-      <Demo theme={theme} />
-    </div>
-  );
+ return (
+        <div className="app-container">
+            <Header theme={theme} handleThemeChange={handleThemeChange} />
+            <Demo theme={theme} />
+            <Login />
+        </div>
+    );
 }
 
 export default App;
