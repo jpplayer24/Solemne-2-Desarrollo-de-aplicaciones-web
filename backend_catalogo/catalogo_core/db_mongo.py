@@ -98,3 +98,50 @@ def check_mongo_connection():
         return True, "Conexion exitosa a MongoDB"
     except Exception as e:
         return False, str(e)
+
+def setup_mongo_validators():
+    """Configura validaciones estructurales de esquema en MongoDB Atlas."""
+    validator = {
+        "$jsonSchema": {
+            "bsonType": "object",
+            "required": ["name", "price", "stock_fisico", "status"],
+            "properties": {
+                "name": {
+                    "bsonType": "string",
+                    "description": "El nombre es obligatorio y de tipo string"
+                },
+                "price": {
+                    "bsonType": "int",
+                    "minimum": 1,
+                    "description": "El precio debe ser un entero positivo mayor a 0"
+                },
+                "stock_fisico": {
+                    "bsonType": "int",
+                    "minimum": 0,
+                    "description": "El stock fisico debe ser un entero mayor o igual a 0"
+                },
+                "stock_reservado": {
+                    "bsonType": "int",
+                    "minimum": 0,
+                    "description": "El stock reservado debe ser un entero mayor o igual a 0"
+                },
+                "currency": {
+                    "bsonType": "string"
+                },
+                "status": {
+                    "enum": ["draft", "published", "inactive"]
+                }
+            }
+        }
+    }
+    try:
+        # Aplica o actualiza las reglas de validación en la colección
+        db.command("collMod", "productos", validator=validator)
+        return True, "Validador estructural aplicado con exito en MongoDB"
+    except Exception:
+        try:
+            # Si la colección no existía con validador, la crea con las reglas
+            db.create_collection("productos", validator=validator)
+            return True, "Coleccion productos creada con validador estructural"
+        except Exception as e:
+            return False, str(e)
