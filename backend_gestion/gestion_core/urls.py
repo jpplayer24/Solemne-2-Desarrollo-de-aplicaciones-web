@@ -4,6 +4,8 @@ from django.http import JsonResponse
 from django.db import connection
 from django.db.utils import OperationalError
 
+from usuarios.views import LoginView, LogoutView, MeView
+
 def health_check(request):
     try:
         connection.ensure_connection()
@@ -26,4 +28,8 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health_check'),
+
+    path('api/auth/login/', LoginView.as_view(), name='login'),
+    path('api/auth/logout/', LogoutView.as_view(), name='logout'),
+    path('api/auth/me/', MeView.as_view(), name='me'),
 ]
