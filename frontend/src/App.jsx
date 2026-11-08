@@ -165,7 +165,7 @@ function CatalogoView() {
           Catálogo de Mochilas Técnicas
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1rem', maxWidth: '600px', margin: '0 auto' }}>
-          Equipamiento con materiales hidrófugos de alta resistencia y distribución ergonómica del peso[cite: 1].
+          Equipamiento con materiales hidrófugos de alta resistencia y distribución ergonómica del peso.
         </p>
       </div>
 
@@ -250,7 +250,7 @@ function AdminDashboard() {
           ¡Felicitaciones! Estás verificado como Administrador
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: 0, lineHeight: 1.6 }}>
-          Has iniciado sesión con éxito y tienes acceso completo a las funciones de administración[cite: 1, 4].
+          Has iniciado sesión con éxito y tienes acceso completo a las funciones de administración.
         </p>
       </div>
     </div>
