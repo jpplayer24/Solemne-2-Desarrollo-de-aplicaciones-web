@@ -50,29 +50,30 @@ export default function CarritoModal({ items, onUpdateQuantity, onRemoveItem, on
         overflow: 'hidden'
       }}>
         {/* Encabezado Modal */}
-        <div style={{
-          padding: '1.2rem 1.5rem',
-          borderBottom: '1px solid var(--border-subtle)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800' }}>
-            🎒 Carrito de Mochilas ({items.length})
-          </h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '1.4rem',
-              cursor: 'pointer'
-            }}
-          >
-            &times;
-          </button>
-        </div>
+      <div style={{
+        padding: '1.2rem 1.5rem',
+        borderBottom: '1px solid var(--border-subtle, #e5e7eb)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#ffffff'
+      }}>
+        <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800', color: '#1f2937' }}>
+          🎒 Carrito de Mochilas ({items.length})
+        </h2>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#4b5563',
+            fontSize: '1.4rem',
+            cursor: 'pointer'
+          }}
+        >
+          &times;
+        </button>
+      </div>
 
         {/* Notificación en caso de ajuste de stock o combinación post-login */}
         {notification && (
