@@ -257,10 +257,15 @@ function AdminDashboard() {
   );
 }
 
+// En frontend/src/App.jsx:
 export default function App() {
-  const [theme, setTheme] = useState(localStorage.getItem('app-theme') || 'stealth-black');
+  // Configuración del tema por defecto: si no existe una preferencia guardada en localStorage, carga 'desert-canvas' (Vintage)
+  const [theme, setTheme] = useState(
+    localStorage.getItem('app-theme') || 'desert-canvas'
+  );
 
   useEffect(() => {
+    // RB-10: Persistir y aplicar la variable del tema en la raíz del documento HTML
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('app-theme', theme);
   }, [theme]);
