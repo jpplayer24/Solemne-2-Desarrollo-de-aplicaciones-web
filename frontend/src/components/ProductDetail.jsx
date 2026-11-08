@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useCart } from '../hooks/useCart';
 
-export default function ProductDetail() {
+export default function ProductDetail({ onAddToCart }) {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
 
   const [product, setProduct] = useState(null);
   const [selectedImg, setSelectedImg] = useState(0);
@@ -14,7 +12,6 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Consumo del detalle de mochila (o fallback de prueba)
     axios
       .get(`http://localhost:8000/api/productos/${id}/`)
       .then((res) => {
@@ -22,7 +19,6 @@ export default function ProductDetail() {
         setLoading(false);
       })
       .catch(() => {
-        // Fallback para pruebas locales de interfaz
         setProduct({
           id: id || 'mochila-trekking-65l',
           nombre: 'Mochila Trekking 65L Andina',
@@ -49,9 +45,10 @@ export default function ProductDetail() {
   const isAgotado = stockDisponible === 0;
 
   const handleAgregar = () => {
-    // RB-01: Se almacena en localStorage sin reservar inventario en BD
-    addToCart(product, quantity);
-    alert(`¡${quantity} mochila(s) "${product.nombre}" agregada(s) al carrito anónimo!`);
+    if (onAddToCart) {
+      onAddToCart(product, quantity);
+      alert(`¡${quantity} unidad(es) agregada(s) al carrito!`);
+    }
   };
 
   return (
@@ -64,8 +61,7 @@ export default function ProductDetail() {
         &larr; Volver al Catálogo
       </button>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem' }}>
-        {/* Galería de Imágenes */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem', alignItems: 'start' }}>
         <div>
           <img
             src={product.imagenes[selectedImg]}
@@ -93,13 +89,25 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        {/* Ficha Técnica y Acción de Compra */}
         <div>
-          <h1 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>{product.nombre}</h1>
-          <p style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--primary)', margin: '0.5rem 0' }}>
+          <h1 style={{ 
+            margin: '0 0 0.5rem 0', 
+            fontSize: '2.2rem',
+            lineHeight: '1.25',
+            fontWeight: '800',
+            color: 'var(--text-main)',
+            wordBreak: 'break-word'
+          }}>
+            {product.nombre}
+          </h1>
+
+          <p style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--primary)', margin: '0.8rem 0' }}>
             ${product.precio.toLocaleString('es-CL')} CLP
           </p>
-          <p style={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>{product.descripcion}</p>
+
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.6, margin: '1rem 0 1.5rem 0' }}>
+            {product.descripcion}
+          </p>
 
           <div style={{ margin: '1.5rem 0' }}>
             {isAgotado ? (
@@ -130,7 +138,6 @@ export default function ProductDetail() {
                   textAlign: 'center'
                 }}
               />
-              {/* BOTÓN OBLIGATORIO SCRUM-50 / RB-01 */}
               <button onClick={handleAgregar} className="btn-primary" style={{ flex: 1, padding: '0.75rem' }}>
                 🛒 Agregar al Carrito
               </button>

@@ -47,7 +47,7 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
     }}>
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'var(--text-main)' }}>
-          <img src="/logo.png" alt="Logo DreamHUB" style={{ height: '38px', width: 'auto', display: 'block' }} />
+          <img src="/logo.jpeg" alt="Logo DreamHUB" style={{ height: '38px', width: 'auto', display: 'block' }} />
           <span style={{ fontSize: '1.25rem', fontWeight: '800' }}>
             Dream<span style={{ color: 'var(--primary)' }}>HUB</span>
           </span>
@@ -67,7 +67,6 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
       </div>
 
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-        {/* BOTÓN DEL CARRITO CON CONTADOR */}
         <button
           onClick={onOpenCarrito}
           className="btn-secondary"
@@ -105,7 +104,6 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
   );
 }
 
-// Vista de Catálogo
 function CatalogoView() {
   const mochilas = [
     {
@@ -140,7 +138,7 @@ function CatalogoView() {
             <img src={item.img} alt={item.nombre} style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: 'var(--radius-md)' }} />
             <h3 style={{ margin: '1rem 0 0.5rem 0' }}>{item.nombre}</h3>
             <p style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--primary)' }}>${item.precio.toLocaleString('es-CL')} CLP</p>
-            <Link to={`/producto/${item.id}`} className="btn-primary" style={{ width: '100%', textCenter: 'center', boxSizing: 'border-box' }}>
+            <Link to={`/producto/${item.id}`} className="btn-primary" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }}>
               Ver Ficha Técnica
             </Link>
           </div>
@@ -150,10 +148,34 @@ function CatalogoView() {
   );
 }
 
+function AdminDashboard() {
+  return (
+    <div style={{ padding: '3.5rem 1.5rem', maxWidth: '650px', margin: '0 auto', textAlign: 'center' }}>
+      <div style={{
+        padding: '2.5rem',
+        borderRadius: 'var(--radius-lg)',
+        backgroundColor: 'var(--bg-surface)',
+        border: '1.5px solid var(--border-subtle)',
+        boxShadow: 'var(--shadow-lg)'
+      }}>
+        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
+        <h1 style={{ color: 'var(--primary)', margin: '0 0 0.8rem 0', fontSize: '1.7rem', fontWeight: '800' }}>
+          ¡Felicitaciones! Estás verificado como Administrador
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: 0, lineHeight: 1.6 }}>
+          Has iniciado sesión con éxito y tienes acceso completo a las funciones de administración.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('app-theme') || 'desert-canvas');
   const [modalAbierto, setModalAbierto] = useState(false);
-  const { cartItems, updateQuantity, removeFromCart, cartNotification } = useCart();
+  
+  // Extraemos addToCart junto con las demás funciones del hook único
+  const { cartItems, addToCart, updateQuantity, removeFromCart, cartNotification } = useCart();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -171,14 +193,24 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Inicio />} />
           <Route path="/catalogo" element={<CatalogoView />} />
-          <Route path="/producto/:id" element={<ProductDetail />} />
+          <Route 
+            path="/producto/:id" 
+            element={<ProductDetail onAddToCart={addToCart} />} 
+          />
           <Route path="/quienes-somos" element={<QuienesSomos />} />
           <Route path="/login" element={<Login />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
-      {/* MODAL DEL CARRITO ANÓNIMO */}
       {modalAbierto && (
         <CarritoModal
           items={cartItems}
