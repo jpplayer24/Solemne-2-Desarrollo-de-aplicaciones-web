@@ -1,6 +1,5 @@
 from django.contrib import admin
-from django.urls import path
-from django.http import JsonResponse
+from django.urls import path, include
 from django.db import connection
 from django.db.utils import OperationalError
 from cms_gestion import views
@@ -17,7 +16,8 @@ def home_bienvenida(request):
             "/api/tema/",
             "/api/contacto/",
             "/api/clientes/importar-csv/",
-            "/api/activar-cuenta/generar/"
+            "/api/activar-cuenta/generar/",
+            "/api/carrito/sincronizar/"
         ]
     })
 
@@ -51,5 +51,7 @@ urlpatterns = [
     path('api/clientes/importar-csv/', views.importar_clientes_csv, name='importar_clientes_csv'),
     path('api/activar-cuenta/generar/', views.generar_enlace_activacion, name='generar_enlace_activacion'),
     path('api/activar-cuenta/<uuid:token>/', views.activar_cuenta_token, name='activar_cuenta_token'),
+    
+    # Delegación de rutas hacia el microservicio del catálogo y carrito (SCRUM-48 y 49)
+    path('api/', include('catalogo_core.urls')),
 ]
-

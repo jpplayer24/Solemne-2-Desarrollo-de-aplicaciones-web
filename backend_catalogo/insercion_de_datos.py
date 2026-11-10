@@ -1,54 +1,26 @@
-# backend_catalogo/seed_db.py
-import os
-from dotenv import load_dotenv
-from pymongo import MongoClient
+from catalogo_core.db_mongo import get_productos_collection
+from pymongo.errors import PyMongoError
 
-# Cargar variables de entorno locales (.env)
-load_dotenv()
-
-MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "catalogo_db")
-
-def inserciondedatos():
-    if not MONGO_URI:
-        print("Error: MONGO_URI no está configurada en el .env")
-        return
-
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    db = client[MONGO_DB_NAME]
-    coleccion = db["productos"]
-
+def ejecutar_insercion_prueba():
+    coleccion = get_productos_collection()
     
-    prueba = [
-        {
-            "name": "Mochila Urbana",
-            "description": "Mochila con un alto estilo",
-            "category_id": "urbanas",
-            "precio": 45990,
-
-            "stock_fisico": 15,
-            "stock_reservado": 0,
-            
-        },
-        {
-            "name": "Mochila triple bolsillo",
-            "description": "Mochila con triple bolsillo para accesorios.",
-            "category_id": "viaje",
-            "precio": 89990,
-            "stock_fisico": 8,
-            "stock_reservado": 0,
-            
-        }
-    ]
-
+    producto_prueba = {
+        "sku": "MCH-URB-001",
+        "nombre": "Mochila Urbana Resistente",
+        "descripcion": "Mochila ideal para el entorno universitario con compartimento para laptop.",
+        "categoria_id": "CAT-URB",
+        "precio": 45000,
+        "stock_inicial": 25,
+        "moneda": "CLP",
+        "imagenes": ["url_imagen_1.jpg", "url_imagen_2.jpg"],
+        "estado_activo": True
+    }
+    
     try:
-        #borrar coleccion si existe alguna
-        coleccion.delete_many({})
-        
-        resultado = coleccion.insert_many(prueba)
-        print(f" Éxito: Se insertaron {len(resultado.inserted_ids)} mochilas iniciales en MongoDB Atlas.")
-    except Exception as e:
-        print(f"Error al escribir en MongoDB Atlas: {e}")
+        resultado = coleccion.insert_one(producto_prueba)
+        print(f"Éxito: Documento insertado correctamente en MongoDB Atlas con ID: {resultado.inserted_id}")
+    except PyMongoError as e:
+        print(f"Error algorítmico o de validación BSON: {str(e)}")
 
 if __name__ == "__main__":
-    inserciondedatos()
+    ejecutar_insercion_prueba()

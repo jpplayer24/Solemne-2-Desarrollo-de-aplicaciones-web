@@ -19,3 +19,6 @@ class ProductoSerializer(serializers.Serializer):
         if value < 0:
             raise serializers.ValidationError("El stock inicial no puede ser negativo; debe ser mayor o igual a 0.")
         return value
+class ItemCarritoSerializer(serializers.Serializer):
+    sku = serializers.CharField(max_length=100, required=True)
+    cantidad = serializers.IntegerField(min_value=1, required=True)    

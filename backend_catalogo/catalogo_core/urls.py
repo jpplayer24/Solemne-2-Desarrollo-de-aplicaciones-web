@@ -4,6 +4,7 @@ from django.urls import path
 from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from .db_mongo import check_mongo_connection, db
+from .views import SincronizarCarritoView, ProcesarOrdenView
 
 def health_check(request):
     conectado, mensaje = check_mongo_connection()
@@ -30,4 +31,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/health/', health_check, name='health_check'),
     path('api/products/', listar_productos, name='listar_productos'),
+    path('carrito/sincronizar/', SincronizarCarritoView.as_view(), name='sincronizar_carrito'),
+    path('ordenes/crear/', ProcesarOrdenView.as_view(), name='crear_orden'),
 ]
