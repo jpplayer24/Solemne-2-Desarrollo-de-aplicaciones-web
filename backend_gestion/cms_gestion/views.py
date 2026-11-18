@@ -1,9 +1,12 @@
+import csv
+import io
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework import status
 from .models import ContenidoPagina, ConfiguracionTema, MensajeContacto, ClienteImportado, TokenActivacion
 from .serializers import ContenidoPaginaSerializer, ConfiguracionTemaSerializer, MensajeContactoSerializer
+from .services import noti_compras
 
 
 @api_view(['GET', 'PUT', 'POST'])
@@ -233,3 +236,55 @@ def activar_cuenta_token(request, token):
         "cliente_activo": True,
         "estado": cliente.estado
     }, status=status.HTTP_200_OK)
+    
+@api_view(['POST'])
+def notificar_compra(request):
+    '''
+    Se encarga de recibir los datos de una compra confirmada y envia 2 correos, con toda la informacion de la compra en Dreamhu.
+    Si falla el envio del correo, se registra el fallo sin revertir el fallo. 
+    
+    '''
+    
+    orden_id = request.data.get('orden_id')
+    nombre_cliente = (request.data.get('nombre_cliente') or '').strip()
+    email_cliente = (request.data.get('email_cliente') or '').strip()
+    items = request.data.get('items', [])
+    total_compra = request.data.get('total')
+    
+    if not orden_id or not nombre_cliente or not email_cliente or not items :
+        return Response(
+            {"error": "Falran datos obligatorios: 'orden_id', 'nombre_cliente', 'email_cliente', 'items "},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    items_procesados = []
+    total_calculado = 0 
+    for item in items:
+        nombre = item.get('nombre', 'Mochila Dreamhub')
+        cantidad = int(item.get('cantidad', 1))
+        precio_unitario = float(item.get('precio_unitario', 0 ))
+        subtotal = cantidad * precio_unitario
+        total_calculado += subtotal
+        items_procesados.append({
+            "nombre": nombre,
+            "cantidad": cantidad,
+            "precio_unitario": precio_unitario,
+            "subtotal": subtotal,
+        })
+    total_final = total_compra if total_compra is not None else total_calculado
+    
+    resultado = noti_compras(
+        orden_id=orden_id,
+        nombre_cliente=nombre_cliente,
+        email_cliente=email_cliente,
+        items_mochila=items_procesados,
+        total_compra=total_final,
+    )
+    
+    return Response(
+        {
+            "mensaje": "Proceso de notificación ejecutado (RB-09: compra protegida ante fallos SMTP).",
+            "orden_id": orden_id,
+            "notificaciones": resultado,
+        },
+        status=status.HTTP_201_CREATED
+    )
