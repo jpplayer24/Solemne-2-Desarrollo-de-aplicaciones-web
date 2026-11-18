@@ -128,3 +128,7 @@ body {
   border-color: var(--primary);
   color: var(--primary);
 }
+
+h1, h2, h3, h4 {
+  color: var(--text-main);
+}

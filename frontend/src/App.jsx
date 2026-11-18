@@ -133,7 +133,12 @@ function CatalogoView() {
   return (
     <div style={{ maxWidth: '1200px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 0.5rem 0' }}>
+        <h1 style={{ 
+          fontSize: '2rem', 
+          fontWeight: '800', 
+          margin: '0 0 0.5rem 0', 
+          color: 'var(--text-main)' 
+        }}>
           Catálogo de Mochilas ({mochilasFiltradas.length} disponibles)
         </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0 }}>
