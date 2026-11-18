@@ -7,8 +7,10 @@ from .views import (
     listar_productos_paginado,
     detalle_producto,
     SincronizarCarritoView,
-    ProcesarOrdenView
+    ProcesarOrdenView,
+    CrearProductoView
 )
+
 
 def health_check(request):
     conectado, mensaje = check_mongo_connection()
@@ -28,4 +30,5 @@ urlpatterns = [
     path('api/products/<str:producto_id>/', detalle_producto, name='detalle_producto'),
     path('carrito/sincronizar/', SincronizarCarritoView.as_view(), name='sincronizar_carrito'),
     path('ordenes/crear/', ProcesarOrdenView.as_view(), name='crear_orden'),
+    path('api/admin/productos/crear/', CrearProductoView.as_view(), name='crear_producto'),
 ]
