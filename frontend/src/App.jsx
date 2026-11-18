@@ -11,6 +11,7 @@ import CarritoModal from './components/CarritoModal';
 import Checkout from './components/Checkout';
 import ConfirmacionOrden from './components/ConfirmacionOrden';
 import { useCart } from './hooks/useCart';
+import { LISTA_MOCHILAS } from './data/mochilasData';
 
 function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
   const navigate = useNavigate();
