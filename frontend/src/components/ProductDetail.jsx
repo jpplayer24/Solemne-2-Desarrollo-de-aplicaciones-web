@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { LISTA_MOCHILAS } from '../data/mochilasData';
 
 export default function ProductDetail({ onAddToCart }) {
   const { id } = useParams();
@@ -12,6 +13,10 @@ export default function ProductDetail({ onAddToCart }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setSelectedImg(0);
+    setQuantity(1);
+    setLoading(true);
+
     axios
       .get(`http://localhost:8000/api/productos/${id}/`)
       .then((res) => {
@@ -19,27 +24,14 @@ export default function ProductDetail({ onAddToCart }) {
         setLoading(false);
       })
       .catch(() => {
-        setProduct({
-          id: id || 'mochila-trekking-65l',
-          nombre: 'Mochila Trekking 65L Andina',
-          precio: 89990,
-          descripcion: 'Mochila de alta capacidad construida con Cordura Ripstop de 1000D e impermeable.',
-          capacidad_litros: 65,
-          stock_fisico: 10,
-          stock_reservado: 2,
-          activo: true,
-          imagenes: [
-            'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1581605405669-fcdf81165afa?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=600&q=80',
-          ]
-        });
+        // Buscamos la mochila exacta dentro de nuestro catálogo de 50 productos
+        const mochilaLocal = LISTA_MOCHILAS.find((m) => m.id === id) || LISTA_MOCHILAS[0];
+        setProduct(mochilaLocal);
         setLoading(false);
       });
   }, [id]);
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>Cargando producto...</div>;
+  if (loading || !product) return <div style={{ padding: '3rem', textAlign: 'center' }}>Cargando producto...</div>;
 
   const stockDisponible = Math.max(0, (product.stock_fisico || 0) - (product.stock_reservado || 0));
   const isAgotado = stockDisponible === 0;
@@ -47,7 +39,7 @@ export default function ProductDetail({ onAddToCart }) {
   const handleAgregar = () => {
     if (onAddToCart) {
       onAddToCart(product, quantity);
-      alert(`¡${quantity} unidad(es) agregada(s) al carrito!`);
+      alert(`¡${quantity} unidad(es) de "${product.nombre}" agregada(s) al carrito!`);
     }
   };
 
@@ -58,7 +50,7 @@ export default function ProductDetail({ onAddToCart }) {
         className="btn-secondary"
         style={{ marginBottom: '1.5rem' }}
       >
-        &larr; Volver al Catálogo
+        ← Volver al Catálogo
       </button>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2.5rem', alignItems: 'start' }}>
@@ -90,9 +82,12 @@ export default function ProductDetail({ onAddToCart }) {
         </div>
 
         <div>
+          <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase' }}>
+            {product.categoria} • Capacidad {product.capacidad_litros}L
+          </span>
           <h1 style={{ 
-            margin: '0 0 0.5rem 0', 
-            fontSize: '2.2rem',
+            margin: '0.4rem 0 0.5rem 0', 
+            fontSize: '2.1rem',
             lineHeight: '1.25',
             fontWeight: '800',
             color: 'var(--text-main)',
