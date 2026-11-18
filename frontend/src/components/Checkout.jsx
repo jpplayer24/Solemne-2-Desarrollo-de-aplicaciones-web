@@ -102,7 +102,7 @@ export default function Checkout({ cartItems, onClearCart }) {
               id="direccion"
               type="text"
               required
-              placeholder="Ej: Av. Recoleta 1234, Depto 402, Santiago"
+              placeholder="Ej: Av. Coliflores 1412, puchuncaví "
               value={direccion}
               onChange={(e) => setDireccion(e.target.value)}
               style={{
