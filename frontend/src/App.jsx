@@ -15,6 +15,7 @@ import QuienesSomos from './components/QuienesSomos';
 import CarritoModal from './components/CarritoModal';
 import Checkout from './components/Checkout';
 import ConfirmacionOrden from './components/ConfirmacionOrden';
+import ImportarCSV from './components/ImportarCSV';
 
 // Importamos nuestro hook personalizado del carrito y la lista de 50 mochilas
 import { useCart } from './hooks/useCart';
