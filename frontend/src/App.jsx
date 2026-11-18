@@ -8,6 +8,8 @@ import ProductDetail from './components/ProductDetail';
 import Inicio from './components/Inicio';
 import QuienesSomos from './components/QuienesSomos';
 import CarritoModal from './components/CarritoModal';
+import Checkout from './components/Checkout';
+import ConfirmacionOrden from './components/ConfirmacionOrden';
 import { useCart } from './hooks/useCart';
 
 function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
@@ -47,7 +49,7 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
     }}>
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'var(--text-main)' }}>
-          <img src="/logo.jpeg" alt="Logo DreamHUB" style={{ height: '38px', width: 'auto', display: 'block' }} />
+          <img src="/logo.jpeg" alt="Logo DreamHUB" style={{ height: '38px', width: 'auto', display: 'block', borderRadius: '4px' }} />
           <span style={{ fontSize: '1.25rem', fontWeight: '800' }}>
             Dream<span style={{ color: 'var(--primary)' }}>HUB</span>
           </span>
@@ -173,9 +175,8 @@ function AdminDashboard() {
 export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('app-theme') || 'desert-canvas');
   const [modalAbierto, setModalAbierto] = useState(false);
-  
-  // Extraemos addToCart junto con las demás funciones del hook único
-  const { cartItems, addToCart, updateQuantity, removeFromCart, cartNotification } = useCart();
+
+  const { cartItems, addToCart, updateQuantity, removeFromCart, clearCart, cartNotification } = useCart();
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -193,12 +194,28 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Inicio />} />
           <Route path="/catalogo" element={<CatalogoView />} />
-          <Route 
-            path="/producto/:id" 
-            element={<ProductDetail onAddToCart={addToCart} />} 
-          />
+          <Route path="/producto/:id" element={<ProductDetail onAddToCart={addToCart} />} />
           <Route path="/quienes-somos" element={<QuienesSomos />} />
           <Route path="/login" element={<Login />} />
+
+          {/* Rutas Protegidas de Compra y Confirmación */}
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute allowedRoles={['CLIENTE', 'ADMIN']}>
+                <Checkout cartItems={cartItems} onClearCart={clearCart} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/confirmacion/:ordenId"
+            element={
+              <ProtectedRoute allowedRoles={['CLIENTE', 'ADMIN']}>
+                <ConfirmacionOrden />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/admin"
             element={
