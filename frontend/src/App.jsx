@@ -336,8 +336,6 @@ function AdminDashboard() {
   const [tituloBanner, setTituloBanner] = useState('Equipamiento Táctico y Urbano de Alto Rendimiento');
   const [subtituloBanner, setSubtituloBanner] = useState('Mochilas diseñadas con materiales resistentes al agua y ergonomía probada en ruta.');
   const [mensajeGuardado, setMensajeGuardado] = useState('');
-  // Estado para guardar el archivo CSV seleccionado (RF-12)
-  const [archivoCsv, setArchivoCsv] = useState(null);
 
   // Leemos todas las órdenes guardadas para que el administrador pueda revisarlas
   const ordenesTotales = Object.values(JSON.parse(localStorage.getItem('dreamhub_ordenes') || '{}'));
