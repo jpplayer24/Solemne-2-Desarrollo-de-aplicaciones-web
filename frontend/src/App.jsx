@@ -1,6 +1,11 @@
+// Importamos los hooks principales de React para manejar estados y efectos secundarios
 import { useState, useEffect } from 'react';
+// Importamos las herramientas de react-router-dom para navegar entre páginas sin recargar
 import { Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+// Importamos los estilos globales y las variables de los temas visuales
 import './App.css';
+
+// Importamos los componentes y vistas de nuestra aplicación
 import Header from './components/Header';
 import Login from './Login';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -10,15 +15,24 @@ import QuienesSomos from './components/QuienesSomos';
 import CarritoModal from './components/CarritoModal';
 import Checkout from './components/Checkout';
 import ConfirmacionOrden from './components/ConfirmacionOrden';
+
+// Importamos nuestro hook personalizado del carrito y la lista de 50 mochilas
 import { useCart } from './hooks/useCart';
 import { LISTA_MOCHILAS } from './data/mochilasData';
 
+// ============================================================================
+// Componente: BarraNavegacion
+// Muestra el logo, los enlaces principales, el botón del carrito y el control de sesión
+// ============================================================================
 function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Revisamos en localStorage si hay un usuario logueado y cuál es su rol
   const token = localStorage.getItem('token');
   const rol = (localStorage.getItem('role') || 'VISITANTE').toUpperCase();
 
+  // Función para cerrar sesión limpiando los datos guardados en el navegador
   const cerrarSesion = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
@@ -26,6 +40,7 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
     navigate('/login');
   };
 
+  // Estilo dinámico para resaltar el enlace de la página en la que estamos parados
   const navLinkStyle = (path) => ({
     textDecoration: 'none',
     fontSize: '0.92rem',
@@ -48,6 +63,7 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
       top: 0,
       zIndex: 50
     }}>
+      {/* Lado izquierdo: Logo de DreamHUB y menú de navegación */}
       <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textDecoration: 'none', color: 'var(--text-main)' }}>
           <img src="/logo.jpeg" alt="Logo DreamHUB" style={{ height: '38px', width: 'auto', display: 'block', borderRadius: '4px' }} />
@@ -61,21 +77,34 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
           <Link to="/catalogo" style={navLinkStyle('/catalogo')}>Catálogo</Link>
           <Link to="/quienes-somos" style={navLinkStyle('/quienes-somos')}>Quiénes Somos</Link>
 
+          {/* Si el usuario tiene rol ADMIN, mostramos el acceso directo a su panel */}
           {rol === 'ADMIN' && (
-            <Link to="/admin" style={{ textDecoration: 'none', fontSize: '0.85rem', fontWeight: '700', color: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '0.35rem 0.8rem', borderRadius: 'var(--radius-sm)' }}>
-              🛡️ Panel Admin
+            <Link
+              to="/admin"
+              style={{
+                textDecoration: 'none',
+                fontSize: '0.85rem',
+                fontWeight: '700',
+                color: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                padding: '0.35rem 0.8rem',
+                borderRadius: 'var(--radius-sm)'
+              }}
+            >
+              Panel Admin
             </Link>
           )}
         </div>
       </div>
 
+      {/* Lado derecho: Botón del carrito con contador y botón de Login/Logout */}
       <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
         <button
           onClick={onOpenCarrito}
           className="btn-secondary"
           style={{ position: 'relative', padding: '0.55rem 1rem' }}
         >
-          🎒 Carrito
+          Carrito
           {cantidadTotal > 0 && (
             <span style={{
               position: 'absolute',
@@ -107,24 +136,30 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
   );
 }
 
+// ============================================================================
+// Componente: CatalogoView
+// Muestra las 50 mochilas con buscador por nombre, filtro por categoría y paginación
+// ============================================================================
 function CatalogoView() {
+  // Estados para controlar el buscador, el filtro activo y la página actual
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('TODAS');
   const [paginaActual, setPaginaActual] = useState(1);
   const itemsPorPagina = 12;
 
-  // Filtrar las 50 mochilas por texto y categoría
+  // Filtramos la lista completa según lo que escriba el usuario y la categoría elegida
   const mochilasFiltradas = LISTA_MOCHILAS.filter((m) => {
     const coincideTexto = m.nombre.toLowerCase().includes(busqueda.toLowerCase());
     const coincideCat = categoriaFiltro === 'TODAS' || m.categoria.includes(categoriaFiltro);
     return coincideTexto && coincideCat;
   });
 
-  // Cálculo de paginación
+  // Calculamos cuántas páginas salen en total y cortamos el arreglo para mostrar 12 por página
   const totalPaginas = Math.ceil(mochilasFiltradas.length / itemsPorPagina);
   const indiceInicio = (paginaActual - 1) * itemsPorPagina;
   const mochilasPaginadas = mochilasFiltradas.slice(indiceInicio, indiceInicio + itemsPorPagina);
 
+  // Al cambiar de categoría, volvemos siempre a la página 1
   const manejarCambioFiltro = (nuevaCat) => {
     setCategoriaFiltro(nuevaCat);
     setPaginaActual(1);
@@ -132,13 +167,9 @@ function CatalogoView() {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
+      {/* Título principal del catálogo */}
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ 
-          fontSize: '2rem', 
-          fontWeight: '800', 
-          margin: '0 0 0.5rem 0', 
-          color: 'var(--text-main)' 
-        }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>
           Catálogo de Mochilas ({mochilasFiltradas.length} disponibles)
         </h1>
         <p style={{ color: 'var(--text-muted)', margin: 0 }}>
@@ -146,7 +177,7 @@ function CatalogoView() {
         </p>
       </div>
 
-      {/* Barra de Búsqueda y Filtros */}
+      {/* Barra con campo de búsqueda y botones de filtro por categoría */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -161,7 +192,7 @@ function CatalogoView() {
       }}>
         <input
           type="text"
-          placeholder="🔍 Buscar mochila por nombre o modelo..."
+          placeholder="Buscar mochila por nombre o modelo..."
           value={busqueda}
           onChange={(e) => {
             setBusqueda(e.target.value);
@@ -192,7 +223,7 @@ function CatalogoView() {
         </div>
       </div>
 
-      {/* Grilla de Tarjetas */}
+      {/* Grilla donde dibujamos las tarjetas de las mochilas de la página actual */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '1.8rem' }}>
         {mochilasPaginadas.map((item) => (
           <div
@@ -207,6 +238,7 @@ function CatalogoView() {
               boxShadow: 'var(--shadow-sm)'
             }}
           >
+            {/* Imagen de la mochila con su etiqueta de categoría */}
             <div style={{ position: 'relative', height: '200px' }}>
               <img
                 src={item.imagenes[0]}
@@ -229,6 +261,7 @@ function CatalogoView() {
               </span>
             </div>
 
+            {/* Datos de la mochila y enlace a su ficha técnica */}
             <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
               <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase' }}>
                 {item.categoria} • {item.capacidad_litros}L
@@ -254,7 +287,7 @@ function CatalogoView() {
         ))}
       </div>
 
-      {/* Controles de Paginación */}
+      {/* Botones de paginación inferior */}
       {totalPaginas > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem', marginTop: '2.5rem' }}>
           <button
@@ -291,19 +324,26 @@ function CatalogoView() {
   );
 }
 
+// ============================================================================
+// Componente: AdminDashboard
+// Panel exclusivo para usuarios con rol ADMIN (CMS, carga CSV y auditoría de órdenes)
+// ============================================================================
 function AdminDashboard() {
+  // Estado para cambiar entre las 3 pestañas del administrador
   const [pestana, setPestana] = useState('cms');
+  // Estados para editar los textos de la portada (RF-02)
   const [tituloBanner, setTituloBanner] = useState('Equipamiento Táctico y Urbano de Alto Rendimiento');
   const [subtituloBanner, setSubtituloBanner] = useState('Mochilas diseñadas con materiales resistentes al agua y ergonomía probada en ruta.');
   const [mensajeGuardado, setMensajeGuardado] = useState('');
+  // Estado para guardar el archivo CSV seleccionado (RF-12)
   const [archivoCsv, setArchivoCsv] = useState(null);
 
-  // Obtenemos las órdenes registradas en localStorage para que el Admin las audite
+  // Leemos todas las órdenes guardadas para que el administrador pueda revisarlas
   const ordenesTotales = Object.values(JSON.parse(localStorage.getItem('dreamhub_ordenes') || '{}'));
 
+  // Guarda los cambios del banner en localStorage (y a futuro en el endpoint de Django)
   const guardarCambiosCMS = (e) => {
     e.preventDefault();
-    // Se conectará con PUT http://localhost:8000/api/cms/inicio/ al integrar el endpoint de Django
     localStorage.setItem('cms_inicio_custom', JSON.stringify({ tituloBanner, subtituloBanner }));
     setMensajeGuardado('Textos de Inicio actualizados correctamente.');
     setTimeout(() => setMensajeGuardado(''), 3000);
@@ -312,13 +352,15 @@ function AdminDashboard() {
   return (
     <div style={{ maxWidth: '1000px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
       <div style={{ marginBottom: '2rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
-        <h1 style={{ margin: '0 0 0.4rem 0', fontSize: '1.8rem' }}>Panel de Administración DreamHUB</h1>
+        <h1 style={{ margin: '0 0 0.4rem 0', fontSize: '1.8rem', color: 'var(--text-main)' }}>
+          Panel de Administración DreamHUB
+        </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)' }}>
           Gestión de contenidos públicos (CMS), carga masiva CSV y auditoría de órdenes.
         </p>
       </div>
 
-      {/* Selector de Módulos Administrativos */}
+      {/* Botones para navegar entre los módulos del administrador */}
       <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '2rem' }}>
         <button
           onClick={() => setPestana('cms')}
@@ -340,7 +382,7 @@ function AdminDashboard() {
         </button>
       </div>
 
-      {/* Módulo 1: Editor CMS de Inicio */}
+      {/* Vista 1: Formulario para editar el banner de Inicio */}
       {pestana === 'cms' && (
         <form
           onSubmit={guardarCambiosCMS}
@@ -397,7 +439,7 @@ function AdminDashboard() {
         </form>
       )}
 
-      {/* Módulo 2: Vista previa de Importación CSV */}
+      {/* Vista 2: Selector de archivo CSV para carga masiva */}
       {pestana === 'csv' && (
         <div
           style={{
@@ -425,7 +467,7 @@ function AdminDashboard() {
         </div>
       )}
 
-      {/* Módulo 3: Auditoría de Órdenes (Permiso de propiedad ADMIN) */}
+      {/* Vista 3: Listado de todas las órdenes para auditoría del Admin */}
       {pestana === 'ordenes' && (
         <div
           style={{
@@ -472,55 +514,46 @@ function AdminDashboard() {
   );
 }
 
-function AdminDashboard() {
-  return (
-    <div style={{ padding: '3.5rem 1.5rem', maxWidth: '650px', margin: '0 auto', textAlign: 'center' }}>
-      <div style={{
-        padding: '2.5rem',
-        borderRadius: 'var(--radius-lg)',
-        backgroundColor: 'var(--bg-surface)',
-        border: '1.5px solid var(--border-subtle)',
-        boxShadow: 'var(--shadow-lg)'
-      }}>
-        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎉</div>
-        <h1 style={{ color: 'var(--primary)', margin: '0 0 0.8rem 0', fontSize: '1.7rem', fontWeight: '800' }}>
-          ¡Felicitaciones! Estás verificado como Administrador
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', margin: 0, lineHeight: 1.6 }}>
-          Has iniciado sesión con éxito y tienes acceso completo a las funciones de administración.
-        </p>
-      </div>
-    </div>
-  );
-}
-
+// ============================================================================
+// Componente Principal: App
+// Controla el tema visual global, el modal del carrito y las rutas de la web
+// ============================================================================
 export default function App() {
+  // Cargamos el tema guardado en localStorage o usamos 'desert-canvas' (Vintage) por defecto
   const [theme, setTheme] = useState(localStorage.getItem('app-theme') || 'desert-canvas');
+  // Estado para abrir o cerrar la ventana emergente del carrito
   const [modalAbierto, setModalAbierto] = useState(false);
 
+  // Obtenemos los productos y funciones desde nuestro hook personalizado useCart
   const { cartItems, addToCart, updateQuantity, removeFromCart, clearCart, cartNotification } = useCart();
 
+  // Cada vez que cambia el tema, lo aplicamos al atributo HTML y lo guardamos en localStorage (RB-10)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('app-theme', theme);
   }, [theme]);
 
+  // Sumamos todas las unidades que hay en el carrito para mostrar el número en la barra
   const cantidadTotal = cartItems.reduce((acc, item) => acc + item.cantidad, 0);
 
   return (
     <div className="app-container">
+      {/* Barra superior fija */}
       <BarraNavegacion onOpenCarrito={() => setModalAbierto(true)} cantidadTotal={cantidadTotal} />
+      {/* Selector de temas visuales */}
       <Header theme={theme} handleThemeChange={(e) => setTheme(e.target.value)} />
 
+      {/* Contenedor principal donde cambian las páginas según la URL */}
       <main style={{ flex: 1 }}>
         <Routes>
+          {/* Rutas públicas */}
           <Route path="/" element={<Inicio />} />
           <Route path="/catalogo" element={<CatalogoView />} />
           <Route path="/producto/:id" element={<ProductDetail onAddToCart={addToCart} />} />
           <Route path="/quienes-somos" element={<QuienesSomos />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Rutas Protegidas de Compra y Confirmación */}
+          {/* Rutas protegidas para clientes autenticados y administradores */}
           <Route
             path="/checkout"
             element={
@@ -538,6 +571,7 @@ export default function App() {
             }
           />
 
+          {/* Ruta exclusiva para administradores */}
           <Route
             path="/admin"
             element={
@@ -546,10 +580,13 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          {/* Si el usuario escribe una URL que no existe, lo redirigimos al Inicio */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
 
+      {/* Ventana modal del carrito que se muestra solo cuando modalAbierto es true */}
       {modalAbierto && (
         <CarritoModal
           items={cartItems}
