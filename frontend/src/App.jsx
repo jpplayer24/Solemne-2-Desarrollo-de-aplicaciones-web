@@ -438,33 +438,8 @@ function AdminDashboard() {
         </form>
       )}
 
-      {/* Vista 2: Selector de archivo CSV para carga masiva */}
-      {pestana === 'csv' && (
-        <div
-          style={{
-            backgroundColor: 'var(--bg-surface)',
-            padding: '2rem',
-            borderRadius: 'var(--radius-lg)',
-            border: '1px solid var(--border-subtle)'
-          }}
-        >
-          <h3 style={{ marginTop: 0 }}>Importación Masiva (.CSV)</h3>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>
-            Selecciona un archivo CSV codificado para validar estructura y cargar registros al sistema.
-          </p>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setArchivoCsv(e.target.files[0])}
-            style={{ marginBottom: '1rem', display: 'block' }}
-          />
-          {archivoCsv && (
-            <div style={{ padding: '1rem', backgroundColor: 'var(--bg-body)', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem' }}>
-              Archivo cargado: <strong>{archivoCsv.name}</strong> ({(archivoCsv.size / 1024).toFixed(2)} KB) — Listo para procesar.
-            </div>
-          )}
-        </div>
-      )}
+      {/* Vista 2: Importación masiva CSV con visualizador de informe */}
+      {pestana === 'csv' && <ImportarCSV />}
 
       {/* Vista 3: Listado de todas las órdenes para auditoría del Admin */}
       {pestana === 'ordenes' && (
