@@ -43,6 +43,7 @@ def health_check(request):
 urlpatterns = [
     path('', home_bienvenida, name='home_bienvenida'),
     path('admin/', admin.site.urls),
+    path('api/auth/', include('usuarios.urls')),
     path('api/health/', health_check, name='health_check'),
     path('api/textos/', views.gestionar_textos, name='listar_textos'),
     path('api/textos/<str:seccion>/', views.gestionar_textos, name='gestionar_textos'),
@@ -53,7 +54,7 @@ urlpatterns = [
     path('api/activar-cuenta/<uuid:token>/', views.activar_cuenta_token, name='activar_cuenta_token'),
     
     #NOTIFICACIONES PARA CORREOS 
-    path('api/notificaciones/compra/',views.notificar_compra, name='notificar_compra')
+    path('api/notificaciones/compra/',views.notificar_compra, name='notificar_compra'),
     
     # Delegación de rutas hacia el microservicio del catálogo y carrito (SCRUM-48 y 49)
     #path('api/', include('catalogo_core.urls')),
