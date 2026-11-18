@@ -292,6 +292,187 @@ function CatalogoView() {
 }
 
 function AdminDashboard() {
+  const [pestana, setPestana] = useState('cms');
+  const [tituloBanner, setTituloBanner] = useState('Equipamiento Táctico y Urbano de Alto Rendimiento');
+  const [subtituloBanner, setSubtituloBanner] = useState('Mochilas diseñadas con materiales resistentes al agua y ergonomía probada en ruta.');
+  const [mensajeGuardado, setMensajeGuardado] = useState('');
+  const [archivoCsv, setArchivoCsv] = useState(null);
+
+  // Obtenemos las órdenes registradas en localStorage para que el Admin las audite
+  const ordenesTotales = Object.values(JSON.parse(localStorage.getItem('dreamhub_ordenes') || '{}'));
+
+  const guardarCambiosCMS = (e) => {
+    e.preventDefault();
+    // Se conectará con PUT http://localhost:8000/api/cms/inicio/ al integrar el endpoint de Django
+    localStorage.setItem('cms_inicio_custom', JSON.stringify({ tituloBanner, subtituloBanner }));
+    setMensajeGuardado('Textos de Inicio actualizados correctamente.');
+    setTimeout(() => setMensajeGuardado(''), 3000);
+  };
+
+  return (
+    <div style={{ maxWidth: '1000px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
+      <div style={{ marginBottom: '2rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
+        <h1 style={{ margin: '0 0 0.4rem 0', fontSize: '1.8rem' }}>Panel de Administración DreamHUB</h1>
+        <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+          Gestión de contenidos públicos (CMS), carga masiva CSV y auditoría de órdenes.
+        </p>
+      </div>
+
+      {/* Selector de Módulos Administrativos */}
+      <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '2rem' }}>
+        <button
+          onClick={() => setPestana('cms')}
+          className={pestana === 'cms' ? 'btn-primary' : 'btn-secondary'}
+        >
+          Editar Portada (CMS)
+        </button>
+        <button
+          onClick={() => setPestana('csv')}
+          className={pestana === 'csv' ? 'btn-primary' : 'btn-secondary'}
+        >
+          Importar CSV
+        </button>
+        <button
+          onClick={() => setPestana('ordenes')}
+          className={pestana === 'ordenes' ? 'btn-primary' : 'btn-secondary'}
+        >
+          Auditar Órdenes ({ordenesTotales.length})
+        </button>
+      </div>
+
+      {/* Módulo 1: Editor CMS de Inicio */}
+      {pestana === 'cms' && (
+        <form
+          onSubmit={guardarCambiosCMS}
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            padding: '2rem',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.2rem'
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Configuración del Banner Principal (Inicio)</h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontWeight: '600', fontSize: '0.9rem' }}>Título Principal del Banner</label>
+            <input
+              type="text"
+              value={tituloBanner}
+              onChange={(e) => setTituloBanner(e.target.value)}
+              style={{
+                padding: '0.75rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'var(--bg-body)',
+                color: 'var(--text-main)'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <label style={{ fontWeight: '600', fontSize: '0.9rem' }}>Subtítulo Descriptivo</label>
+            <textarea
+              rows="3"
+              value={subtituloBanner}
+              onChange={(e) => setSubtituloBanner(e.target.value)}
+              style={{
+                padding: '0.75rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                backgroundColor: 'var(--bg-body)',
+                color: 'var(--text-main)',
+                fontFamily: 'inherit'
+              }}
+            />
+          </div>
+
+          {mensajeGuardado && <p style={{ color: '#10b981', fontWeight: '600', margin: 0 }}>{mensajeGuardado}</p>}
+
+          <button type="submit" className="btn-primary" style={{ alignSelf: 'flex-start' }}>
+            Guardar Cambios en Inicio
+          </button>
+        </form>
+      )}
+
+      {/* Módulo 2: Vista previa de Importación CSV */}
+      {pestana === 'csv' && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            padding: '2rem',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)'
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Importación Masiva (.CSV)</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+            Selecciona un archivo CSV codificado para validar estructura y cargar registros al sistema.
+          </p>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={(e) => setArchivoCsv(e.target.files[0])}
+            style={{ marginBottom: '1rem', display: 'block' }}
+          />
+          {archivoCsv && (
+            <div style={{ padding: '1rem', backgroundColor: 'var(--bg-body)', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem' }}>
+              Archivo cargado: <strong>{archivoCsv.name}</strong> ({(archivoCsv.size / 1024).toFixed(2)} KB) — Listo para procesar.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Módulo 3: Auditoría de Órdenes (Permiso de propiedad ADMIN) */}
+      {pestana === 'ordenes' && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-surface)',
+            padding: '2rem',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--border-subtle)'
+          }}
+        >
+          <h3 style={{ marginTop: 0 }}>Órdenes Registradas en el Sistema</h3>
+          {ordenesTotales.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)' }}>Aún no se han generado órdenes de compra.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {ordenesTotales.map((ord) => (
+                <div
+                  key={ord.id}
+                  style={{
+                    padding: '1rem',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: 'var(--bg-body)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div>
+                    <strong>{ord.id}</strong> — Cliente: <span>{ord.propietario_email}</span>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      Envío: {ord.direccion_envio} • Total: ${ord.total?.toLocaleString('es-CL')} CLP
+                    </div>
+                  </div>
+                  <Link to={`/confirmacion/${ord.id}`} className="btn-secondary" style={{ fontSize: '0.85rem' }}>
+                    Inspeccionar Comprobante
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AdminDashboard() {
   return (
     <div style={{ padding: '3.5rem 1.5rem', maxWidth: '650px', margin: '0 auto', textAlign: 'center' }}>
       <div style={{
