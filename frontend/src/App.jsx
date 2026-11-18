@@ -108,45 +108,180 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
 }
 
 function CatalogoView() {
-  const mochilas = [
-    {
-      id: 'mochila-trekking-65l',
-      nombre: 'Mochila Trekking 65L Andina',
-      categoria: 'Expedición / Outdoor',
-      precio: 89990,
-      capacidad: '65L',
-      img: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80',
-      badge: 'Más Vendida'
-    },
-    {
-      id: 'mochila-urbana-25l',
-      nombre: 'Mochila Urbana Stealth 25L',
-      categoria: 'Ciudad / Compartimento 16"',
-      precio: 49990,
-      capacidad: '25L',
-      img: 'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=600&q=80',
-      badge: 'Impermeable'
-    }
-  ];
+  const [busqueda, setBusqueda] = useState('');
+  const [categoriaFiltro, setCategoriaFiltro] = useState('TODAS');
+  const [paginaActual, setPaginaActual] = useState(1);
+  const itemsPorPagina = 12;
+
+  // Filtrar las 50 mochilas por texto y categoría
+  const mochilasFiltradas = LISTA_MOCHILAS.filter((m) => {
+    const coincideTexto = m.nombre.toLowerCase().includes(busqueda.toLowerCase());
+    const coincideCat = categoriaFiltro === 'TODAS' || m.categoria.includes(categoriaFiltro);
+    return coincideTexto && coincideCat;
+  });
+
+  // Cálculo de paginación
+  const totalPaginas = Math.ceil(mochilasFiltradas.length / itemsPorPagina);
+  const indiceInicio = (paginaActual - 1) * itemsPorPagina;
+  const mochilasPaginadas = mochilasFiltradas.slice(indiceInicio, indiceInicio + itemsPorPagina);
+
+  const manejarCambioFiltro = (nuevaCat) => {
+    setCategoriaFiltro(nuevaCat);
+    setPaginaActual(1);
+  };
 
   return (
-    <div style={{ maxWidth: '1180px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
-      <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-        <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 0.5rem 0' }}>Catálogo de Mochilas</h1>
+    <div style={{ maxWidth: '1200px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
+      <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 0.5rem 0' }}>
+          Catálogo de Mochilas ({mochilasFiltradas.length} disponibles)
+        </h1>
+        <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+          Explora nuestra colección completa de equipamiento outdoor, táctico y urbano.
+        </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '2rem' }}>
-        {mochilas.map((item) => (
-          <div key={item.id} style={{ backgroundColor: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)', overflow: 'hidden', padding: '1.4rem' }}>
-            <img src={item.img} alt={item.nombre} style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: 'var(--radius-md)' }} />
-            <h3 style={{ margin: '1rem 0 0.5rem 0' }}>{item.nombre}</h3>
-            <p style={{ fontSize: '1.3rem', fontWeight: '800', color: 'var(--primary)' }}>${item.precio.toLocaleString('es-CL')} CLP</p>
-            <Link to={`/producto/${item.id}`} className="btn-primary" style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box' }}>
-              Ver Ficha Técnica
-            </Link>
+      {/* Barra de Búsqueda y Filtros */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '1rem',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '2rem',
+        padding: '1rem',
+        backgroundColor: 'var(--bg-surface)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border-subtle)'
+      }}>
+        <input
+          type="text"
+          placeholder="🔍 Buscar mochila por nombre o modelo..."
+          value={busqueda}
+          onChange={(e) => {
+            setBusqueda(e.target.value);
+            setPaginaActual(1);
+          }}
+          style={{
+            flex: '1 1 260px',
+            padding: '0.65rem 1rem',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-body)',
+            color: 'var(--text-main)',
+            fontSize: '0.92rem'
+          }}
+        />
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {['TODAS', 'Outdoor', 'Ciudad', 'Militar', 'Alta Montaña', 'Cabina'].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => manejarCambioFiltro(cat)}
+              className={categoriaFiltro === cat ? 'btn-primary' : 'btn-secondary'}
+              style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grilla de Tarjetas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '1.8rem' }}>
+        {mochilasPaginadas.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: 'var(--radius-lg)',
+              border: '1px solid var(--border-subtle)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          >
+            <div style={{ position: 'relative', height: '200px' }}>
+              <img
+                src={item.imagenes[0]}
+                alt={item.nombre}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+              <span style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                backgroundColor: 'var(--badge-bg)',
+                color: 'var(--badge-text)',
+                padding: '0.25rem 0.65rem',
+                borderRadius: '20px',
+                fontSize: '0.75rem',
+                fontWeight: '700',
+                backdropFilter: 'blur(6px)'
+              }}>
+                {item.badge}
+              </span>
+            </div>
+
+            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase' }}>
+                {item.categoria} • {item.capacidad_litros}L
+              </span>
+              <h3 style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                {item.nombre}
+              </h3>
+
+              <div style={{ marginTop: 'auto' }}>
+                <p style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 0.9rem 0' }}>
+                  ${item.precio.toLocaleString('es-CL')} <small style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>CLP</small>
+                </p>
+                <Link
+                  to={`/producto/${item.id}`}
+                  className="btn-primary"
+                  style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box', padding: '0.55rem' }}
+                >
+                  Ver Ficha Técnica
+                </Link>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+
+      {/* Controles de Paginación */}
+      {totalPaginas > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem', marginTop: '2.5rem' }}>
+          <button
+            disabled={paginaActual === 1}
+            onClick={() => setPaginaActual((p) => p - 1)}
+            className="btn-secondary"
+            style={{ opacity: paginaActual === 1 ? 0.5 : 1 }}
+          >
+            ← Anterior
+          </button>
+
+          {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((numPag) => (
+            <button
+              key={numPag}
+              onClick={() => setPaginaActual(numPag)}
+              className={paginaActual === numPag ? 'btn-primary' : 'btn-secondary'}
+              style={{ padding: '0.5rem 0.9rem' }}
+            >
+              {numPag}
+            </button>
+          ))}
+
+          <button
+            disabled={paginaActual === totalPaginas}
+            onClick={() => setPaginaActual((p) => p + 1)}
+            className="btn-secondary"
+            style={{ opacity: paginaActual === totalPaginas ? 0.5 : 1 }}
+          >
+            Siguiente →
+          </button>
+        </div>
+      )}
     </div>
   );
 }
