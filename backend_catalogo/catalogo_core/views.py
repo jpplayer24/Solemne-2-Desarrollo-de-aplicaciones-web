@@ -221,3 +221,56 @@ class ProcesarOrdenView(APIView):
             "orden_id": nueva_orden.id,
             "total": total_orden
         }, status=status.HTTP_201_CREATED)
+
+class CrearProductoView(APIView):
+        # Para pruebas usar AllowAny en vez de isAdminUser.
+    permission_classes = [isAdminUser] 
+
+    def post(self, request):
+        datos = request.data
+        coleccion = get_productos_collection()
+
+        try:
+            precio = int(datos.get("precio", 0))
+            stock_fisico = int(datos.get("stock_inicial", -1))
+        except ValueError:
+            return Response({"error": "Precio y stock deben ser números enteros."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if precio <= 0 or stock_fisico < 0:
+            return Response({"error": "Precio debe ser > 0 y stock físico >= 0."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not datos.get("nombre", "").strip() or not datos.get("descripcion", "").strip():
+            return Response({"error": "Nombre y descripción no pueden estar vacíos."}, status=status.HTTP_400_BAD_REQUEST)
+
+        imagenes = datos.get("imagenes", [])
+        if not isinstance(imagenes, list) or len(imagenes) < 4 or len(imagenes) > 6:
+            return Response({"error": "El producto debe tener entre 4 y 6 imágenes válidas."}, status=status.HTTP_400_BAD_REQUEST)
+
+        sku = datos.get("sku", get_random_string(length=10).upper())
+
+        if coleccion.find_one({"sku": sku}):
+            return Response({"error": "Ya existe un producto con este identificador (SKU)."}, status=status.HTTP_400_BAD_REQUEST)
+
+      
+        nuevo_producto = {
+            "sku": sku,
+            "nombre": datos.get("nombre").strip(),
+            "descripcion": datos.get("descripcion").strip(),
+            "categoria_id": datos.get("categoria_id", "GENERAL"),
+            "precio": precio,
+            "stock_inicial": stock_fisico,  
+            "stock_reservado": 0,           
+            "moneda": datos.get("moneda", "CLP"),
+            "imagenes": imagenes,
+            "estado_activo": datos.get("estado_activo", True)
+        }
+
+        try:
+            coleccion.insert_one(nuevo_producto)
+            nuevo_producto.pop("_id", None)
+            return Response({
+                "mensaje": "Producto creado exitosamente",
+                "producto": nuevo_producto
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": f"Fallo al guardar en MongoDB: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
