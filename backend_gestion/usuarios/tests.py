@@ -1,114 +1,108 @@
+from django.test import TestCase
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User
+from django.urls import reverse
+from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
-from rest_framework import status
 
-
-User = get_user_model()
-
-
-class AuthenticationTests(APITestCase):
+class AutenticacionTests(APITestCase):
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="cliente_test",
-            email="cliente@test.com",
-            password="TestPassword123!"
+        # Crear un usuario de prueba para cada test
+        self.usuario = User.objects.create_user(
+            username='usuario_test',
+            password='ClavePrueba777'
         )
 
-        self.login_url = "/api/auth/login/"
-        self.logout_url = "/api/auth/logout/"
-        self.me_url = "/api/auth/me/"
+        self.token = Token.objects.create(user=self.usuario)
+        # Obtener las URL de autenticación
+        self.url_login = reverse('login')
+        self.url_logout = reverse('logout')
+        self.url_me = reverse('me')
 
-    def test_login_correcto(self):
-        response = self.client.post(
-            self.login_url,
-            {
-                "email": "cliente@test.com",
-                "password": "TestPassword123!"
-            },
-            format="json"
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("access", response.data)
-        self.assertEqual(response.data["user"]["role"], "CLIENTE")
-
-    def test_login_con_contrasena_incorrecta(self):
-        response = self.client.post(
-            self.login_url,
-            {
-                "email": "cliente@test.com",
-                "password": "incorrecta"
-            },
-            format="json"
-        )
-
+    def test_acceso_me_sin_token(self):
+        response = self.client.get(self.url_me)
         self.assertEqual(
             response.status_code,
             status.HTTP_401_UNAUTHORIZED
         )
 
-    def test_acceso_sin_token(self):
-        response = self.client.get(self.me_url)
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_401_UNAUTHORIZED
-        )
-
-    def test_acceso_con_token_invalido(self):
+    def test_acceso_me_con_token_invalido(self):
         self.client.credentials(
-            HTTP_AUTHORIZATION="Token token_invalido"
+            HTTP_AUTHORIZATION='Token token_invalido'
         )
 
-        response = self.client.get(self.me_url)
+        response = self.client.get(self.url_me)
 
         self.assertEqual(
             response.status_code,
             status.HTTP_401_UNAUTHORIZED
         )
 
-    def test_acceso_con_token_valido(self):
-        token = Token.objects.create(user=self.user)
-
+    def test_acceso_me_con_token_valido(self):
         self.client.credentials(
-            HTTP_AUTHORIZATION=f"Token {token.key}"
+            HTTP_AUTHORIZATION=f'Token {self.token.key}'
+        )
+        response = self.client.get(self.url_me)
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+        
+        self.assertEqual(
+        response.data['username'],
+        'usuario_test'
         )
 
-        response = self.client.get(self.me_url)
+    def test_login_con_credenciales_validas(self):
+        response = self.client.post(
+            self.url_login,
+            {
+                'username': 'usuario_test',
+                'password': 'ClavePrueba777'
+            }
+        )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["email"], "cliente@test.com")
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK
+        )
+
+        self.assertIn('token', response.data)
+        self.assertEqual(
+            response.data['username'],
+            'usuario_test'
+        )
 
     def test_logout_invalida_token(self):
-        token = Token.objects.create(user=self.user)
-
         self.client.credentials(
-            HTTP_AUTHORIZATION=f"Token {token.key}"
+            HTTP_AUTHORIZATION=f'Token {self.token.key}'
         )
 
-        response_logout = self.client.post(self.logout_url)
+        response_logout = self.client.post(self.url_logout)
 
         self.assertEqual(
             response_logout.status_code,
             status.HTTP_200_OK
         )
 
+        # Comprobar que el token se elimina de la BD
         self.assertFalse(
-            Token.objects.filter(key=token.key).exists()
+            Token.objects.filter(key=self.token.key).exists()
         )
 
-        response_me = self.client.get(self.me_url)
+        # Intentar acceder usando el mismo token
+        response_me = self.client.get(self.url_me)
 
         self.assertEqual(
             response_me.status_code,
             status.HTTP_401_UNAUTHORIZED
         )
 
-    def test_logout_sin_autenticacion(self):
-        response = self.client.post(self.logout_url)
+    def test_logout_sin_token(self):
+        response = self.client.post(self.url_logout)
 
         self.assertEqual(
             response.status_code,

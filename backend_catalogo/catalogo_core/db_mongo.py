@@ -7,7 +7,7 @@ load_dotenv()
 
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "catalogo_db")
-COLLECTION_NAME = "productos"
+COLLECTION_NAME = os.getenv("MONGO_COLLECTION_NAME", "productos")
 
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
 db = client[MONGO_DB_NAME]
@@ -23,6 +23,7 @@ PRODUCTO_VALIDATOR = {
             "categoria_id",
             "precio",
             "stock_inicial",
+            "stock_reservado",
             "moneda",
             "imagenes",
             "estado_activo"
@@ -54,16 +55,23 @@ PRODUCTO_VALIDATOR = {
                 "minimum": 0,
                 "description": "Unidades iniciales en bodega mayores o iguales a 0"
             },
+            "stock_reservado": {
+                "bsonType": "int", 
+                "minimum": 0,
+                "description": "Unidades reservadas mayores o iguales a 0"
+            },
             "moneda": {
                 "bsonType": "string",
                 "description": "Código de moneda (ej. CLP)"
             },
             "imagenes": {
                 "bsonType": "array",
+                "minItems": 4,
+                "maxItems": 6,
                 "items": {
                     "bsonType": "string"
                 },
-                "description": "Lista de URLs de imágenes del producto"
+                "description": "Lista de 4 a 6 URLs de imágenes del producto"
             },
             "estado_activo": {
                 "bsonType": "bool",
