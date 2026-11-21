@@ -293,3 +293,35 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["total"], 1)
         self.assertEqual(resp.data["ordenes"][0]["orden_id"], str(orden.id))
+
+
+
+    def test_cc06_ignora_precio_y_total_manipulados_por_cliente(self):
+        url = reverse("crear_orden")
+
+        payload = {
+            "items": [
+                {
+                    "sku": "MCH-URB-001",
+                    "cantidad": 1,
+                    "precio": 1,
+                }
+            ],
+            "total": 1,
+        }
+
+        respuesta = self.client.post(url, payload, format="json")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        
+        #el servidor debe utilizar el precio real de MongoDB
+        self.assertEqual(respuesta.data["total"], 45000)
+
+        orden = OrdenDeCompra.objects.get(
+            id= respuesta.data["orden_id"]
+        )
+
+        self.assertEqual(orden.total_pagado, 45000)
+        item = orden.items.get()
+        self.assertEqual(item.precio_unitario_fijo, 45000)
+        self.assertEqual(item.subtotal, 45000)
