@@ -1,36 +1,42 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .db_mongo import db, get_productos_collection
+from .models import EstadoOrden, ItemOrden, OrdenDeCompra
+from .reconciliation import ErrorConciliacion, conciliar_pago_orden
 from .serializers import ItemCarritoSerializer
-from .db_mongo import get_productos_collection, db
+
+
+def _obtener_stock_disponible(producto):
+    if "stock_fisico" in producto:
+        return producto.get("stock_fisico", 0) - producto.get("stock_reservado", 0)
+    return producto.get("stock_inicial", 0)
+
 
 class SincronizarCarritoView(APIView):
-    # Permite acceso a invitados y usuarios logueados
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 1. Validar que el frontend solo envíe un array de objetos con "sku" y "cantidad"
         serializer = ItemCarritoSerializer(data=request.data, many=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         items_entrantes = serializer.validated_data
         coleccion_productos = get_productos_collection()
-        coleccion_carritos = db["carritos"] # Nueva colección para persistir el carro
-        
-        # Detectar si el usuario mandó token de sesión
+        coleccion_carritos = db["carritos"]
+
         usuario_id = str(request.user.id) if request.user.is_authenticated else None
         carrito_matematico = {}
 
-        # 2. SCRUM-49: Si hay sesión, extraer el carro guardado de días anteriores
         if usuario_id:
             carrito_db = coleccion_carritos.find_one({"usuario_id": usuario_id})
             if carrito_db:
                 for item in carrito_db.get("items", []):
                     carrito_matematico[item["sku"]] = item["cantidad"]
 
-        # 3. SCRUM-49: Fusionar (sumar) el carro local con el carro guardado
         for item in items_entrantes:
             sku = item["sku"]
             cantidad = item["cantidad"]
@@ -39,99 +45,220 @@ class SincronizarCarritoView(APIView):
             else:
                 carrito_matematico[sku] = cantidad
 
-        # 4. SCRUM-48: Calcular precios reales contra MongoDB
         total_dinero = 0
         detalle_boleta = []
         items_finales_para_guardar = []
 
         for sku, cantidad in carrito_matematico.items():
-            # Leer la fuente de verdad inmutable
             producto = coleccion_productos.find_one({"sku": sku})
-            
-            # Descartar si el producto fue borrado o no hay stock de la suma total
-            if not producto or producto.get("stock_inicial", 0) < cantidad:
-                continue 
-            
+            if not producto or _obtener_stock_disponible(producto) < cantidad:
+                continue
+
             precio_real = producto["precio"]
             subtotal = precio_real * cantidad
             total_dinero += subtotal
-            
+
             detalle_boleta.append({
                 "sku": sku,
                 "nombre": producto.get("nombre", "Sin nombre"),
                 "cantidad": cantidad,
                 "precio_unitario": precio_real,
-                "subtotal": subtotal
+                "subtotal": subtotal,
             })
-            
+
             items_finales_para_guardar.append({"sku": sku, "cantidad": cantidad})
 
-        # 5. Guardar la fusión en MongoDB solo si el usuario está autenticado
         if usuario_id:
             coleccion_carritos.update_one(
                 {"usuario_id": usuario_id},
                 {"$set": {"items": items_finales_para_guardar}},
-                upsert=True
+                upsert=True,
             )
 
-        return Response({
-            "detalle": detalle_boleta,
-            "total_carrito": total_dinero
-        }, status=status.HTTP_200_OK)
-from django.db import transaction
-from .models import OrdenDeCompra, ItemOrden
+        return Response(
+            {"detalle": detalle_boleta, "total_carrito": total_dinero},
+            status=status.HTTP_200_OK,
+        )
+
 
 class ProcesarOrdenView(APIView):
     def post(self, request):
         items = request.data.get('items', [])
-        if not items:
+        if not isinstance(items, list) or not items:
             return Response({"error": "El carrito está vacío"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ItemCarritoSerializer(data=items, many=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         coleccion = get_productos_collection()
         total_orden = 0
         items_a_guardar = []
 
-        # 1. Recálculo estricto contra MongoDB (Seguridad CC-06)
-        for item in items:
-            sku = item.get('sku')
-            cantidad = item.get('cantidad', 1)
-            
+        for item in serializer.validated_data:
+            sku = item['sku']
+            cantidad = item['cantidad']
+
             producto = coleccion.find_one({"sku": sku})
-            if not producto or producto.get("stock_inicial", 0) < cantidad:
-                return Response({"error": f"Error de stock o SKU para {sku}"}, status=status.HTTP_400_BAD_REQUEST)
-            
+            if not producto or _obtener_stock_disponible(producto) < cantidad:
+                return Response(
+                    {"error": f"Error de stock o SKU para {sku}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             precio_real = producto["precio"]
             subtotal = precio_real * cantidad
             total_orden += subtotal
-            
+
             items_a_guardar.append({
                 "sku": sku,
                 "cantidad": cantidad,
                 "precio": precio_real,
-                "subtotal": subtotal
+                "subtotal": subtotal,
             })
 
-        # 2. El Snapshot: Congelar los datos en PostgreSQL
         try:
             with transaction.atomic():
                 nueva_orden = OrdenDeCompra.objects.create(
                     usuario_id=str(request.user.id) if request.user.is_authenticated else "Invitado",
-                    total_pagado=total_orden
+                    total_pagado=total_orden,
+                    estado=EstadoOrden.PENDIENTE_PAGO,
                 )
-                
+
                 for i in items_a_guardar:
                     ItemOrden.objects.create(
                         orden=nueva_orden,
                         sku=i["sku"],
                         cantidad=i["cantidad"],
                         precio_unitario_fijo=i["precio"],
-                        subtotal=i["subtotal"]
+                        subtotal=i["subtotal"],
                     )
-        except Exception as e:
-            return Response({"error": "Fallo en la persistencia transaccional"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception:
+            return Response(
+                {"error": "Fallo en la persistencia transaccional"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        return Response({
-            "mensaje": "Orden procesada y congelada exitosamente",
-            "orden_id": nueva_orden.id,
-            "total": total_orden
-        }, status=status.HTTP_201_CREATED)    
+        return Response(
+            {
+                "mensaje": "Orden procesada y congelada exitosamente",
+                "orden_id": str(nueva_orden.id),
+                "estado": nueva_orden.estado,
+                "expira_en": nueva_orden.fecha_expiracion_reserva.isoformat(),
+                "total": total_orden,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class TransicionarEstadoOrdenView(APIView):
+    """SCRUM-61: Ejecuta transiciones controladas sobre la máquina de estados de una orden."""
+
+    def post(self, request, orden_id):
+        nuevo_estado = request.data.get("estado")
+        motivo = request.data.get("motivo", "")
+
+        if not nuevo_estado:
+            return Response(
+                {"error": "El campo 'estado' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            try:
+                orden = OrdenDeCompra.objects.select_for_update().get(id=orden_id)
+            except OrdenDeCompra.DoesNotExist:
+                return Response(
+                    {"error": f"Orden '{orden_id}' no encontrada."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            estado_anterior = orden.estado
+            try:
+                orden.transicionar_estado(nuevo_estado, motivo=motivo)
+            except ValidationError as exc:
+                return Response(
+                    {"error": exc.messages[0]},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        return Response(
+            {
+                "orden_id": str(orden.id),
+                "estado_anterior": estado_anterior,
+                "estado_actual": orden.estado,
+                "motivo": orden.motivo_estado,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ConciliarPagoOrdenView(APIView):
+    """SCRUM-64: Concilia pagos confirmados/tardíos y deriva a REVISION_REQUERIDA sin stock negativo."""
+
+    def post(self, request, orden_id):
+        monto_pagado = request.data.get("monto_pagado")
+        pago_referencia = request.data.get("pago_referencia")
+        pago_aprobado = request.data.get("pago_aprobado", True)
+
+        if not isinstance(monto_pagado, int) or isinstance(monto_pagado, bool) or monto_pagado <= 0:
+            return Response(
+                {"error": "El campo 'monto_pagado' debe ser un entero positivo en CLP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not pago_referencia or not isinstance(pago_referencia, str):
+            return Response(
+                {"error": "El campo 'pago_referencia' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(pago_aprobado, bool):
+            return Response(
+                {"error": "El campo 'pago_aprobado' debe ser booleano."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            resultado = conciliar_pago_orden(
+                orden_id=orden_id,
+                monto_pagado=monto_pagado,
+                pago_referencia=pago_referencia,
+                pago_aprobado=pago_aprobado,
+            )
+            return Response(resultado, status=status.HTTP_200_OK)
+        except ErrorConciliacion as exc:
+            return Response({"error": exc.mensaje}, status=exc.status_code)
+
+
+class ListarOrdenesRevisionView(APIView):
+    """Lista las órdenes en REVISION_REQUERIDA para el panel administrativo de conciliación."""
+
+    def get(self, request):
+        ordenes = (
+            OrdenDeCompra.objects.filter(estado=EstadoOrden.REVISION_REQUERIDA)
+            .prefetch_related('items')
+            .order_by('-fecha_actualizacion')
+        )
+        data = [
+            {
+                "orden_id": str(orden.id),
+                "usuario_id": orden.usuario_id,
+                "total_pagado": orden.total_pagado,
+                "pago_referencia": orden.pago_referencia,
+                "pago_confirmado_externo": orden.pago_confirmado_externo,
+                "motivo_estado": orden.motivo_estado,
+                "fecha_creacion": orden.fecha_creacion.isoformat(),
+                "items": [
+                    {
+                        "sku": item.sku,
+                        "cantidad": item.cantidad,
+                        "precio_unitario_fijo": item.precio_unitario_fijo,
+                        "subtotal": item.subtotal,
+                    }
+                    for item in orden.items.all()
+                ],
+            }
+            for orden in ordenes
+        ]
+        return Response({"total": len(data), "ordenes": data}, status=status.HTTP_200_OK)
