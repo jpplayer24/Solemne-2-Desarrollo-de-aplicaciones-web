@@ -8,26 +8,39 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import EstadoOrden, ItemOrden, OrdenDeCompra
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import RLock
+from .reconciliation import (
+    _descontar_stock_atomico_mongo,
+    StockInsuficienteError,
+)
+
 
 class FakeTransaction:
-    def __init__(self, store):
+    def __init__(self, store, lock):
         self._store = store
+        self._lock = lock
         self._snapshot = None
 
     def __enter__(self):
+        self._lock.acquire()
         self._snapshot = copy.deepcopy(self._store)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is not None:
-            self._store.clear()
-            self._store.update(self._snapshot)
+        try:
+            if exc_type is not None:
+                self._store.clear()
+                self._store.update(self._snapshot)
+        finally:
+            self._lock.release()
         return False
 
 
 class FakeSession:
-    def __init__(self, store):
+    def __init__(self, store, lock):
         self._store = store
+        self._lock = lock
 
     def __enter__(self):
         return self
@@ -36,15 +49,17 @@ class FakeSession:
         return False
 
     def start_transaction(self):
-        return FakeTransaction(self._store)
+        return FakeTransaction(self._store, self._lock)
 
 
 class FakeMongoClient:
     def __init__(self, store):
         self._store = store
+        self._lock = RLock()
 
     def start_session(self):
-        return FakeSession(self._store)
+        return FakeSession(self._store, self._lock)
+
 
 
 class FakeProductosCollection:
@@ -82,7 +97,7 @@ class FakeProductosCollection:
 
         for campo, delta in actualizacion.get("$inc", {}).items():
             doc[campo] = doc.get(campo, 0) + delta
-
+            
         return SimpleNamespace(modified_count=1)
 
 
@@ -325,3 +340,37 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         item = orden.items.get()
         self.assertEqual(item.precio_unitario_fijo, 45000)
         self.assertEqual(item.subtotal, 45000)
+
+    def test_rnf08_veinte_intentos_por_ultima_unidad(self):
+        # Dejar una unidad disponible.
+        self.mongo_store["MCH-URB-001"]["stock_inicial"] = 1
+
+        item = SimpleNamespace(
+            sku="MCH-URB-001",
+            cantidad=1,
+        )
+
+        def intentar_compra(_):
+            try:
+                _descontar_stock_atomico_mongo([item], False)
+                return True
+            except StockInsuficienteError:
+                return False
+
+        # Ejecutar 20 intentos concurrentes.
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            resultados = list(executor.map(intentar_compra, range(20)))
+
+        compras_exitosas = sum(resultados)
+        compras_rechazadas = resultados.count(False)
+
+        self.assertEqual(compras_exitosas, 1)
+        self.assertEqual(compras_rechazadas, 19)
+        self.assertEqual(
+            self.mongo_store["MCH-URB-001"]["stock_inicial"],
+            0,
+        )
+        self.assertGreaterEqual(
+            self.mongo_store["MCH-URB-001"]["stock_inicial"],
+            0,
+        )
