@@ -87,3 +87,23 @@ class TokenActivacion(models.Model):
 
     def __str__(self):
         return f"Token {self.token} - Usado: {self.usado}"
+    
+class NotificacionCorreo(models.Model):
+    ESTADOS_CORREO =[
+        ('pendiente', 'Pendiente'),
+        ('enviado', 'Enviado'),
+        ('fallido', 'Fallido'),
+    ]    
+    orden_referencia = models.CharField(max_length=100,blank=True, null=True)
+    tipo_destinatario = models.CharField(max_length=50, default='cliente')  # cliente, admin, soporte, etc.
+    destinatario = models.EmailField()
+    asunto = models.CharField(max_length=200)
+    contenido = models.TextField()
+    estado = models.CharField(max_length=20, choices=ESTADOS_CORREO, default='pendiente')
+    intentos = models.PositiveIntegerField(default=0)
+    mensaje_error = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self): 
+        return f"[{self.estado}] {self.tipo_destinatario} -> {self.destinatario} (Orden: {self.orden_referencia})"

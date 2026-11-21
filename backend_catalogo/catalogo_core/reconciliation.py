@@ -18,8 +18,8 @@ class StockInsuficienteError(Exception):
 def _descontar_stock_atomico_mongo(items_orden, es_pago_tardio):
     """
     Ejecuta descuento indivisible en MongoDB Atlas.
+    Soporta tanto (stock_fisico + stock_reservado) como (stock_inicial + stock_reservado).
     Si un SKU carece de stock disponible, aborta la transacción completa sin generar negativos.
-    Retorna la lista de descuentos aplicados para compensación en caso de fallo en PostgreSQL.
     """
     coleccion = get_productos_collection()
     aplicados = []
@@ -31,48 +31,49 @@ def _descontar_stock_atomico_mongo(items_orden, es_pago_tardio):
                 if not doc:
                     raise StockInsuficienteError(f"SKU '{item.sku}' inexistente en catálogo.")
 
-                usa_esquema_reservas = "stock_fisico" in doc
+                campo_stock = "stock_fisico" if "stock_fisico" in doc else "stock_inicial"
+                tiene_reservas = "stock_reservado" in doc
 
-                if usa_esquema_reservas:
+                if tiene_reservas:
                     reservado = doc.get("stock_reservado", 0)
                     if not es_pago_tardio and reservado >= item.cantidad:
                         filtro = {
                             "sku": item.sku,
-                            "stock_fisico": {"$gte": item.cantidad},
+                            campo_stock: {"$gte": item.cantidad},
                             "stock_reservado": {"$gte": item.cantidad},
                         }
                         actualizacion = {
                             "$inc": {
-                                "stock_fisico": -item.cantidad,
+                                campo_stock: -item.cantidad,
                                 "stock_reservado": -item.cantidad,
                             }
                         }
                         reverso = {
                             "$inc": {
-                                "stock_fisico": item.cantidad,
+                                campo_stock: item.cantidad,
                                 "stock_reservado": item.cantidad,
                             }
                         }
                     else:
-                        # En pagos tardíos la reserva expiró; solo se puede tomar stock libre no reservado
+                        # Pago tardío o sin reserva previa: solo consume stock libre no reservado
                         filtro = {
                             "sku": item.sku,
                             "$expr": {
                                 "$gte": [
-                                    {"$subtract": ["$stock_fisico", {"$ifNull": ["$stock_reservado", 0]}]},
+                                    {"$subtract": [f"${campo_stock}", {"$ifNull": ["$stock_reservado", 0]}]},
                                     item.cantidad,
                                 ]
                             },
                         }
-                        actualizacion = {"$inc": {"stock_fisico": -item.cantidad}}
-                        reverso = {"$inc": {"stock_fisico": item.cantidad}}
+                        actualizacion = {"$inc": {campo_stock: -item.cantidad}}
+                        reverso = {"$inc": {campo_stock: item.cantidad}}
                 else:
                     filtro = {
                         "sku": item.sku,
-                        "stock_inicial": {"$gte": item.cantidad},
+                        campo_stock: {"$gte": item.cantidad},
                     }
-                    actualizacion = {"$inc": {"stock_inicial": -item.cantidad}}
-                    reverso = {"$inc": {"stock_inicial": item.cantidad}}
+                    actualizacion = {"$inc": {campo_stock: -item.cantidad}}
+                    reverso = {"$inc": {campo_stock: item.cantidad}}
 
                 resultado = coleccion.update_one(filtro, actualizacion, session=session)
                 if resultado.modified_count != 1:
@@ -110,7 +111,6 @@ def conciliar_pago_orden(orden_id, monto_pagado, pago_referencia, pago_aprobado=
             except OrdenDeCompra.DoesNotExist:
                 raise ErrorConciliacion(f"Orden '{orden_id}' no encontrada.", status_code=404)
 
-            # Idempotencia: reintentos de webhook sobre orden ya consolidada no re-descuentan stock
             if orden.estado == EstadoOrden.CONFIRMADA:
                 return {
                     "orden_id": str(orden.id),
@@ -184,7 +184,6 @@ def conciliar_pago_orden(orden_id, monto_pagado, pago_referencia, pago_aprobado=
             try:
                 descuentos_aplicados = _descontar_stock_atomico_mongo(items_orden, es_pago_tardio)
             except StockInsuficienteError as err:
-                # RF-38: Pago aprobado pero reserva vencida y sin stock -> REVISION_REQUERIDA sin stock negativo
                 orden.transicionar_estado(
                     EstadoOrden.REVISION_REQUERIDA,
                     motivo=f"Pago tardío aprobado sin stock disponible ({err}). Requiere compensación/reembolso.",
@@ -252,6 +251,5 @@ def conciliar_pago_orden(orden_id, monto_pagado, pago_referencia, pago_aprobado=
     except ErrorConciliacion:
         raise
     except Exception:
-        # Compensación ante fallo en commit de PostgreSQL tras descuento en MongoDB
         _revertir_descuento_mongo(descuentos_aplicados)
         raise

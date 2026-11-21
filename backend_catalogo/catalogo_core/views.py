@@ -1,7 +1,12 @@
+# backend_catalogo/catalogo_core/views.py
+from bson.objectid import ObjectId
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.http import JsonResponse
+from django.utils.crypto import get_random_string
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .db_mongo import db, get_productos_collection
@@ -11,9 +16,90 @@ from .serializers import ItemCarritoSerializer
 
 
 def _obtener_stock_disponible(producto):
-    if "stock_fisico" in producto:
-        return producto.get("stock_fisico", 0) - producto.get("stock_reservado", 0)
-    return producto.get("stock_inicial", 0)
+    stock_total = (
+        producto.get("stock_fisico", 0)
+        if "stock_fisico" in producto
+        else producto.get("stock_inicial", 0)
+    )
+    return stock_total - producto.get("stock_reservado", 0)
+
+
+@api_view(['GET'])
+def listar_productos_paginado(request):
+    try:
+        coleccion = get_productos_collection()
+
+        try:
+            pagina = int(request.GET.get('page', 1))
+            limite = int(request.GET.get('limit', 10))
+        except ValueError:
+            pagina = 1
+            limite = 10
+
+        # RNF-03: Limitar estrictamente a un máximo de 50 mochilas por consulta
+        if limite > 50:
+            limite = 50
+        if limite < 1:
+            limite = 10
+        if pagina < 1:
+            pagina = 1
+
+        skip = (pagina - 1) * limite
+
+        filtro = {
+            "$or": [
+                {"estado_activo": True},
+                {"activo": True},
+                {"status": "published"},
+            ]
+        }
+
+        total_productos = coleccion.count_documents(filtro)
+        cursor = coleccion.find(filtro, {"_id": 0}).skip(skip).limit(limite)
+        productos = list(cursor)
+
+        total_paginas = (total_productos + limite - 1) // limite
+
+        return JsonResponse(
+            {
+                "status": "success",
+                "paginacion": {
+                    "total_registros": total_productos,
+                    "total_paginas": total_paginas,
+                    "pagina_actual": pagina,
+                    "por_pagina": limite,
+                },
+                "data": productos,
+            },
+            status=200,
+        )
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(['GET'])
+def detalle_producto(request, producto_id):
+    try:
+        coleccion = get_productos_collection()
+
+        producto = None
+        if ObjectId.is_valid(producto_id):
+            producto = coleccion.find_one({"_id": ObjectId(producto_id)})
+
+        if not producto:
+            producto = coleccion.find_one({"sku": producto_id})
+
+        if not producto:
+            return JsonResponse({"status": "error", "message": "Mochila no encontrada."}, status=404)
+
+        if "_id" in producto:
+            producto["id"] = str(producto.pop("_id"))
+
+        return JsonResponse({"status": "success", "data": producto}, status=200)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
 class SincronizarCarritoView(APIView):
@@ -262,3 +348,87 @@ class ListarOrdenesRevisionView(APIView):
             for orden in ordenes
         ]
         return Response({"total": len(data), "ordenes": data}, status=status.HTTP_200_OK)
+
+
+class CrearProductoView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        datos = request.data
+        coleccion = get_productos_collection()
+
+        precio_raw = datos.get("precio", 0)
+        stock_raw = datos.get("stock_inicial", -1)
+        if isinstance(precio_raw, bool) or isinstance(stock_raw, bool):
+            return Response(
+                {"error": "Precio y stock deben ser números enteros."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            precio = int(precio_raw)
+            stock_fisico = int(stock_raw)
+        except (ValueError, TypeError):
+            return Response(
+                {"error": "Precio y stock deben ser números enteros."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if precio <= 0 or stock_fisico < 0:
+            return Response(
+                {"error": "Precio debe ser > 0 y stock físico >= 0."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nombre = (datos.get("nombre") or "").strip() if isinstance(datos.get("nombre"), str) else ""
+        descripcion = (
+            (datos.get("descripcion") or "").strip()
+            if isinstance(datos.get("descripcion"), str)
+            else ""
+        )
+        if not nombre or not descripcion:
+            return Response(
+                {"error": "Nombre y descripción no pueden estar vacíos."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        imagenes = datos.get("imagenes", [])
+        if not isinstance(imagenes, list) or len(imagenes) < 4 or len(imagenes) > 6:
+            return Response(
+                {"error": "El producto debe tener entre 4 y 6 imágenes válidas."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sku = datos.get("sku") or get_random_string(length=10).upper()
+
+        if coleccion.find_one({"sku": sku}):
+            return Response(
+                {"error": "Ya existe un producto con este identificador (SKU)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nuevo_producto = {
+            "sku": sku,
+            "nombre": nombre,
+            "descripcion": descripcion,
+            "categoria_id": datos.get("categoria_id", "GENERAL"),
+            "precio": precio,
+            "stock_inicial": stock_fisico,
+            "stock_reservado": 0,
+            "moneda": datos.get("moneda", "CLP"),
+            "imagenes": imagenes,
+            "estado_activo": bool(datos.get("estado_activo", True)),
+        }
+
+        try:
+            coleccion.insert_one(nuevo_producto)
+            nuevo_producto.pop("_id", None)
+            return Response(
+                {"mensaje": "Producto creado exitosamente", "producto": nuevo_producto},
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Fallo al guardar en MongoDB: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
