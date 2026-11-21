@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from .db_mongo import db, get_productos_collection
 from .models import EstadoOrden, ItemOrden, OrdenDeCompra
 from .reconciliation import ErrorConciliacion, conciliar_pago_orden
-from .serializers import ItemCarritoSerializer
+from .serializers import ItemCarritoSerializer, ProductoSerializer
 
 
 def _obtener_stock_disponible(producto):
@@ -350,57 +350,36 @@ class ListarOrdenesRevisionView(APIView):
         return Response({"total": len(data), "ordenes": data}, status=status.HTTP_200_OK)
 
 
+
 class CrearProductoView(APIView):
     permission_classes = [IsAdminUser]
 
     def post(self, request):
-        datos = request.data
+        datos = request.data.copy()
+
+        # Generar SKU si no viene informado
+        sku = datos.get("sku")
+        if not isinstance(sku, str) or not sku.strip():
+            datos["sku"] = get_random_string(length=10).upper()
+
+        if not datos.get("categoria_id"):
+            datos["categoria_id"] = "GENERAL"
+
         coleccion = get_productos_collection()
 
-        precio_raw = datos.get("precio", 0)
-        stock_raw = datos.get("stock_inicial", -1)
-        if isinstance(precio_raw, bool) or isinstance(stock_raw, bool):
+        # Validar mediante el serializador DRF
+        serializer = ProductoSerializer(data=datos)
+
+        if not serializer.is_valid():
             return Response(
-                {"error": "Precio y stock deben ser números enteros."},
+                serializer.errors,
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            precio = int(precio_raw)
-            stock_fisico = int(stock_raw)
-        except (ValueError, TypeError):
-            return Response(
-                {"error": "Precio y stock deben ser números enteros."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        datos_validados = serializer.validated_data
+        sku = datos_validados["sku"]
 
-        if precio <= 0 or stock_fisico < 0:
-            return Response(
-                {"error": "Precio debe ser > 0 y stock físico >= 0."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        nombre = (datos.get("nombre") or "").strip() if isinstance(datos.get("nombre"), str) else ""
-        descripcion = (
-            (datos.get("descripcion") or "").strip()
-            if isinstance(datos.get("descripcion"), str)
-            else ""
-        )
-        if not nombre or not descripcion:
-            return Response(
-                {"error": "Nombre y descripción no pueden estar vacíos."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        imagenes = datos.get("imagenes", [])
-        if not isinstance(imagenes, list) or len(imagenes) < 4 or len(imagenes) > 6:
-            return Response(
-                {"error": "El producto debe tener entre 4 y 6 imágenes válidas."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        sku = datos.get("sku") or get_random_string(length=10).upper()
-
+        # Comprobar SKU duplicado
         if coleccion.find_one({"sku": sku}):
             return Response(
                 {"error": "Ya existe un producto con este identificador (SKU)."},
@@ -408,25 +387,22 @@ class CrearProductoView(APIView):
             )
 
         nuevo_producto = {
-            "sku": sku,
-            "nombre": nombre,
-            "descripcion": descripcion,
-            "categoria_id": datos.get("categoria_id", "GENERAL"),
-            "precio": precio,
-            "stock_inicial": stock_fisico,
+            **datos_validados,
             "stock_reservado": 0,
-            "moneda": datos.get("moneda", "CLP"),
-            "imagenes": imagenes,
-            "estado_activo": bool(datos.get("estado_activo", True)),
         }
 
         try:
             coleccion.insert_one(nuevo_producto)
             nuevo_producto.pop("_id", None)
+
             return Response(
-                {"mensaje": "Producto creado exitosamente", "producto": nuevo_producto},
+                {
+                    "mensaje": "Producto creado exitosamente",
+                    "producto": nuevo_producto,
+                },
                 status=status.HTTP_201_CREATED,
             )
+
         except Exception as e:
             return Response(
                 {"error": f"Fallo al guardar en MongoDB: {str(e)}"},

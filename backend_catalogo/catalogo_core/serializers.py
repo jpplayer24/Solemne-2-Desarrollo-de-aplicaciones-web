@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 class ProductoSerializer(serializers.Serializer):
-    sku = serializers.CharField(max_length=50, required=True)
+    sku = serializers.CharField(max_length=50,required=False,allow_blank=True)
     nombre = serializers.CharField(max_length=200, required=True)
     descripcion = serializers.CharField(required=True)
     categoria_id = serializers.CharField(max_length=100, required=True)
