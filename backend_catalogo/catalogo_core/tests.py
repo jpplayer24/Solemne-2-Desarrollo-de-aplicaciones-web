@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from .models import EstadoOrden, ItemOrden, OrdenDeCompra
 
+from pymongo.errors import PyMongoError
 from concurrent.futures import ThreadPoolExecutor
 from threading import RLock
 from .reconciliation import (
@@ -273,15 +274,27 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         url = reverse("conciliar_pago_orden", args=[orden.id])
         payload = {"monto_pagado": 45000, "pago_referencia": "TX-DUP-01", "pago_aprobado": True}
 
-        r1 = self.client.post(url, payload, format="json")
-        r2 = self.client.post(url, payload, format="json")
+        respuestas = []
+        #Simular 5 notificaciones del mismo pago.
+        for _ in range(5):
+            respuesta = self.client.post(url, payload, format="json")
+            respuestas.append(respuesta)
+        # Las cinco notificaciones deben ser aceptadas
+        for respuesta in respuestas:
+            self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
 
-        self.assertEqual(r1.status_code, status.HTTP_200_OK)
-        self.assertFalse(r1.data["idempotente"])
-        self.assertEqual(r2.status_code, status.HTTP_200_OK)
-        self.assertTrue(r2.data["idempotente"])
-        self.assertEqual(self.mongo_store["MCH-URB-001"]["stock_inicial"], 1)
+        # La primera confirma el pago, las otras son idempotentes.
+        self.assertFalse(respuestas[0].data["idempotente"])
 
+        for respuesta in respuestas[1:]:
+            self.assertTrue(respuesta.data["idempotente"])
+
+        #el stock solo debe descontarse una vez.
+        self.assertEqual(
+            self.mongo_store["MCH-URB-001"]["stock_inicial"],
+            1,
+        )
+            
     def test_scrum64_discrepancia_monto_deriva_a_revision_sin_tocar_stock(self):
         orden = self._crear_orden_prueba(sku="MCH-URB-001", cantidad=1, precio=45000)
         url = reverse("conciliar_pago_orden", args=[orden.id])
@@ -294,6 +307,46 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["estado"], EstadoOrden.REVISION_REQUERIDA)
         self.assertEqual(self.mongo_store["MCH-URB-001"]["stock_inicial"], 2)
+
+
+    def test_rnf10_fallo_conexion_mongo_deriva_a_revision_sin_descontar_stock(self):
+        orden = self._crear_orden_prueba(
+            sku="MCH-URB-001",
+            cantidad=1,
+            precio=45000,
+        )
+        url = reverse("conciliar_pago_orden", args=[orden.id])
+
+        # Simular una caída de conexión al intentar iniciar sesión en MongoDB.
+        with patch.object(
+            self.fake_client,
+            "start_session",
+            side_effect=PyMongoError("Fallo de conexion simulado"),
+        ):
+            resp = self.client.post(
+                url,
+                {
+                    "monto_pagado": 45000,
+                    "pago_referencia": "TX-NETWORK-01",
+                    "pago_aprobado": True,
+                },
+                format="json",
+            )
+        #La API debe responder sin confirmar falsamente la orden.
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            resp.data["estado"],
+            EstadoOrden.REVISION_REQUERIDA,
+        )
+        # El inventario debe permanecer intatacto.
+        self.assertEqual(
+            self.mongo_store["MCH-URB-001"]["stock_inicial"],
+            2,
+        )
+
+        # verificar que la orden también quedó guardada en revisión.
+        orden.refresh_from_db()
+        self.assertEqual(orden.estado, EstadoOrden.REVISION_REQUERIDA)
 
     def test_listar_ordenes_revision_requerida(self):
         self.mongo_store["MCH-EXP-002"]["stock_fisico"] = 0
