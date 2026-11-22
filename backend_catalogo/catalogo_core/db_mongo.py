@@ -21,6 +21,8 @@ PRODUCTO_VALIDATOR = {
             "nombre",
             "descripcion",
             "categoria_id",
+            "capacidad_litros",
+            "badge",
             "precio",
             "stock_inicial",
             "stock_reservado",
@@ -44,6 +46,15 @@ PRODUCTO_VALIDATOR = {
             "categoria_id": {
                 "bsonType": "string",
                 "description": "ID de la categoría enviada por el serializador"
+            },
+            "capacidad_litros": {
+                "bsonType": "int",
+                "minimum": 1,
+                "description": "Capacidad de la mochila expresada en litros"
+            },
+            "badge": {
+                "bsonType": "string",
+                "description": "Etiqueta comercial visible en el catálogo"
             },
             "precio": {
                 "bsonType": "int",
