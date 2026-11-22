@@ -46,17 +46,16 @@ def listar_productos_paginado(request):
 
         skip = (pagina - 1) * limite
 
-        filtro = {
-            "$or": [
-                {"estado_activo": True},
-                {"activo": True},
-                {"status": "published"},
-            ]
-        }
+        filtro = {"estado_activo": True}
 
         total_productos = coleccion.count_documents(filtro)
         cursor = coleccion.find(filtro, {"_id": 0}).skip(skip).limit(limite)
         productos = list(cursor)
+
+        for producto in productos:
+            stock_disponible = _obtener_stock_disponible(producto)
+            producto["stock_disponible"] = max(0, stock_disponible)
+            producto["disponible"] = stock_disponible > 0
 
         total_paginas = (total_productos + limite - 1) // limite
 
@@ -85,13 +84,23 @@ def detalle_producto(request, producto_id):
 
         producto = None
         if ObjectId.is_valid(producto_id):
-            producto = coleccion.find_one({"_id": ObjectId(producto_id)})
+            producto = coleccion.find_one({
+                "_id": ObjectId(producto_id),
+                "estado_activo": True
+            })
 
         if not producto:
-            producto = coleccion.find_one({"sku": producto_id})
+            producto = coleccion.find_one({
+                "sku": producto_id,
+                "estado_activo": True
+            })
 
         if not producto:
             return JsonResponse({"status": "error", "message": "Mochila no encontrada."}, status=404)
+
+        stock_disponible = _obtener_stock_disponible(producto)
+        producto["stock_disponible"] = max(0, stock_disponible)
+        producto["disponible"] = stock_disponible > 0
 
         if "_id" in producto:
             producto["id"] = str(producto.pop("_id"))
@@ -348,7 +357,6 @@ class ListarOrdenesRevisionView(APIView):
             for orden in ordenes
         ]
         return Response({"total": len(data), "ordenes": data}, status=status.HTTP_200_OK)
-
 
 
 class CrearProductoView(APIView):
