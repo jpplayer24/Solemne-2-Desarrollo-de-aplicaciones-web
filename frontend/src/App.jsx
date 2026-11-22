@@ -5,6 +5,8 @@ import { Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-r
 // Importamos los estilos globales y las variables de los temas visuales
 import './App.css';
 
+import axios from 'axios';
+
 // Importamos los componentes y vistas de nuestra aplicación
 import Header from './components/Header';
 import Login from './Login';
@@ -19,7 +21,6 @@ import ImportarCSV from './components/ImportarCSV';
 
 // Importamos nuestro hook personalizado del carrito y la lista de 50 mochilas
 import { useCart } from './hooks/useCart';
-import { LISTA_MOCHILAS } from './data/mochilasData';
 
 // ============================================================================
 // Componente: BarraNavegacion
@@ -141,34 +142,117 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
 // Componente: CatalogoView
 // Muestra las 50 mochilas con buscador por nombre, filtro por categoría y paginación
 // ============================================================================
+
 function CatalogoView() {
-  // Estados para controlar el buscador, el filtro activo y la página actual
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('TODAS');
   const [paginaActual, setPaginaActual] = useState(1);
+  const [productos, setProductos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
   const itemsPorPagina = 12;
 
-  // Filtramos la lista completa según lo que escriba el usuario y la categoría elegida
-  const mochilasFiltradas = LISTA_MOCHILAS.filter((m) => {
-    const coincideTexto = m.nombre.toLowerCase().includes(busqueda.toLowerCase());
-    const coincideCat = categoriaFiltro === 'TODAS' || m.categoria.includes(categoriaFiltro);
+  // Cargar productos activos desde Django y MongoDB
+  useEffect(() => {
+    const cargarProductos = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const respuesta = await axios.get('/api/products/?limit=50');
+
+        if (respuesta.data.status !== 'success') {
+          throw new Error('No fue posible obtener el catálogo.');
+        }
+
+        const productosBackend = respuesta.data.data || [];
+
+        // Adaptar los campos de Django al formato que utiliza React
+        const productosAdaptados = productosBackend.map((producto) => {
+          return {
+            id: producto.sku,
+            sku: producto.sku,
+            nombre: producto.nombre,
+            categoria: producto.categoria_id,
+            precio: producto.precio,
+            descripcion: producto.descripcion,
+            capacidad_litros: producto.capacidad_litros,
+            badge: producto.badge,
+            imagenes: producto.imagenes || [],
+            stock_fisico: producto.stock_inicial,
+            stock_reservado: producto.stock_reservado,
+            stock_disponible: producto.stock_disponible,
+            disponible: producto.disponible,
+          };
+        });
+
+        setProductos(productosAdaptados);
+      } catch (err) {
+        console.error('Error al cargar el catálogo:', err);
+        setError('No pudimos cargar los productos. Intenta nuevamente.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    cargarProductos();
+  }, []);
+
+  // Filtrar los productos obtenidos desde MongoDB
+  const mochilasFiltradas = productos.filter((m) => {
+    const coincideTexto = m.nombre
+      .toLowerCase()
+      .includes(busqueda.toLowerCase());
+
+    const coincideCat =
+      categoriaFiltro === 'TODAS' ||
+      m.categoria.toLowerCase().includes(categoriaFiltro.toLowerCase());
+
     return coincideTexto && coincideCat;
   });
 
-  // Calculamos cuántas páginas salen en total y cortamos el arreglo para mostrar 12 por página
-  const totalPaginas = Math.ceil(mochilasFiltradas.length / itemsPorPagina);
-  const indiceInicio = (paginaActual - 1) * itemsPorPagina;
-  const mochilasPaginadas = mochilasFiltradas.slice(indiceInicio, indiceInicio + itemsPorPagina);
+  // Paginación visual de 12 productos
+  const totalPaginas = Math.ceil(
+    mochilasFiltradas.length / itemsPorPagina
+  );
 
-  // Al cambiar de categoría, volvemos siempre a la página 1
+  const indiceInicio = (paginaActual - 1) * itemsPorPagina;
+
+  const mochilasPaginadas = mochilasFiltradas.slice(
+    indiceInicio,
+    indiceInicio + itemsPorPagina
+  );
+
   const manejarCambioFiltro = (nuevaCat) => {
     setCategoriaFiltro(nuevaCat);
     setPaginaActual(1);
   };
 
+  if (loading) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center' }}>
+        Cargando catálogo de productos...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center' }}>
+        <p style={{ color: '#ef4444' }}>{error}</p>
+        <button
+          className="btn-primary"
+          onClick={() => window.location.reload()}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: '1200px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
-      {/* Título principal del catálogo */}
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 0.5rem 0', color: 'var(--text-main)' }}>
           Catálogo de Mochilas ({mochilasFiltradas.length} disponibles)
@@ -178,7 +262,6 @@ function CatalogoView() {
         </p>
       </div>
 
-      {/* Barra con campo de búsqueda y botones de filtro por categoría */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -224,71 +307,75 @@ function CatalogoView() {
         </div>
       </div>
 
-      {/* Grilla donde dibujamos las tarjetas de las mochilas de la página actual */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '1.8rem' }}>
-        {mochilasPaginadas.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              backgroundColor: 'var(--bg-card)',
-              borderRadius: 'var(--radius-lg)',
-              border: '1px solid var(--border-subtle)',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              boxShadow: 'var(--shadow-sm)'
-            }}
-          >
-            {/* Imagen de la mochila con su etiqueta de categoría */}
-            <div style={{ position: 'relative', height: '200px' }}>
-              <img
-                src={item.imagenes[0]}
-                alt={item.nombre}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-              <span style={{
-                position: 'absolute',
-                top: '10px',
-                right: '10px',
-                backgroundColor: 'var(--badge-bg)',
-                color: 'var(--badge-text)',
-                padding: '0.25rem 0.65rem',
-                borderRadius: '20px',
-                fontSize: '0.75rem',
-                fontWeight: '700',
-                backdropFilter: 'blur(6px)'
-              }}>
-                {item.badge}
-              </span>
-            </div>
+      {mochilasFiltradas.length === 0 ? (
+        <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+          No se encontraron productos.
+        </p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '1.8rem' }}>
+          {mochilasPaginadas.map((item) => (
+            <div
+              key={item.sku}
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-subtle)',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'relative', height: '200px' }}>
+                <img
+                  src={item.imagenes[0]}
+                  alt={item.nombre}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  backgroundColor: 'var(--badge-bg)',
+                  color: 'var(--badge-text)',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '20px',
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  backdropFilter: 'blur(6px)'
+                }}>
+                  {item.badge}
+                </span>
+              </div>
 
-            {/* Datos de la mochila y enlace a su ficha técnica */}
-            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase' }}>
-                {item.categoria} • {item.capacidad_litros}L
-              </span>
-              <h3 style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                {item.nombre}
-              </h3>
+              <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase' }}>
+                  {item.categoria} {item.capacidad_litros ? `• ${item.capacidad_litros}L` : ''}
+                </span>
 
-              <div style={{ marginTop: 'auto' }}>
-                <p style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 0.9rem 0' }}>
-                  ${item.precio.toLocaleString('es-CL')} <small style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>CLP</small>
-                </p>
-                <Link
-                  to={`/producto/${item.id}`}
-                  className="btn-primary"
-                  style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box', padding: '0.55rem' }}
-                >
-                  Ver Ficha Técnica
-                </Link>
+                <h3 style={{ margin: '0.4rem 0 0.8rem 0', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                  {item.nombre}
+                </h3>
+
+                <div style={{ marginTop: 'auto' }}>
+                  <p style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 0.9rem 0' }}>
+                    ${item.precio.toLocaleString('es-CL')} <small style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>CLP</small>
+                  </p>
+
+                  <Link
+                    to={`/producto/${encodeURIComponent(item.sku)}`}
+                    className="btn-primary"
+                    style={{ width: '100%', textAlign: 'center', boxSizing: 'border-box', padding: '0.55rem' }}
+                  >
+                    Ver Ficha Técnica
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Botones de paginación inferior */}
       {totalPaginas > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.6rem', marginTop: '2.5rem' }}>
           <button
@@ -324,6 +411,7 @@ function CatalogoView() {
     </div>
   );
 }
+
 
 // ============================================================================
 // Componente: AdminDashboard
