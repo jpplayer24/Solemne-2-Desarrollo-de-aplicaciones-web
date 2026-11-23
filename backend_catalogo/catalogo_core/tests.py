@@ -147,6 +147,7 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         self.patcher_rec_client.start()
         self.patcher_rec_col.start()
         self.patcher_views_col.start()
+        self.patcher_views_client.start()
 
     def tearDown(self):
         self.patcher_rec_client.stop()

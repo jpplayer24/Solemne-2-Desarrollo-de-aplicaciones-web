@@ -16,6 +16,8 @@ for i in range(1, 101):
         "stock_inicial": 10 + i,
         "stock_reservado": 0,
         "moneda": "CLP",
+        "capacidad_litros": 20 + (i % 30),
+        "badge": "Test",
         "imagenes": [
             "https://example.com/mochila-test-1.jpg",
             "https://example.com/mochila-test-2.jpg",

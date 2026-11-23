@@ -1,5 +1,7 @@
 import csv
 import io
+from rest_framework.decorators import permission_classes
+from rest_framework.permissions import IsAdminUser
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
@@ -97,6 +99,7 @@ def gestionar_mensajes_contacto(request):
 
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAdminUser])
 def importar_clientes_csv(request):
     archivo_csv = request.FILES.get('archivo')
     if not archivo_csv:
@@ -264,6 +267,7 @@ def importar_clientes_csv(request):
     }, status=codigo_http)
 
 @api_view(['POST'])
+@permission_classes([IsAdminUser])
 def generar_enlace_activacion(request):
     email = request.data.get('email')
     if not email:

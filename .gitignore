@@ -9,3 +9,4 @@ productos_migracion.json
 .coverage
 htmlcov/
 .pytest_cache/
+.venv/
