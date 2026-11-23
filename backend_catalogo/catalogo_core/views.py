@@ -9,7 +9,7 @@ from rest_framework.decorators import api_view
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .db_mongo import db, get_productos_collection
+from .db_mongo import client, db, get_productos_collection
 from .models import EstadoOrden, ItemOrden, OrdenDeCompra
 from .reconciliation import ErrorConciliacion, conciliar_pago_orden
 from .serializers import ItemCarritoSerializer, ProductoSerializer
@@ -175,60 +175,178 @@ class SincronizarCarritoView(APIView):
             status=status.HTTP_200_OK,
         )
 
+class StockInsuficienteError(Exception):
+    """Se produce cuando no es posible reservar todo el stock solicitado."""
 
 class ProcesarOrdenView(APIView):
     def post(self, request):
-        items = request.data.get('items', [])
+        items = request.data.get("items", [])
+
         if not isinstance(items, list) or not items:
-            return Response({"error": "El carrito está vacío"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "El carrito está vacío"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         serializer = ItemCarritoSerializer(data=items, many=True)
+
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         coleccion = get_productos_collection()
         total_orden = 0
         items_a_guardar = []
+        reservas_aplicadas = []
 
-        for item in serializer.validated_data:
-            sku = item['sku']
-            cantidad = item['cantidad']
+        try:
+            # Una transacción MongoDB garantiza que se reservan
+            # todos los productos o ninguno.
+            with client.start_session() as session:
+                with session.start_transaction():
+                    for item in serializer.validated_data:
+                        sku = item["sku"]
+                        cantidad = item["cantidad"]
 
-            producto = coleccion.find_one({"sku": sku})
-            if not producto or _obtener_stock_disponible(producto) < cantidad:
-                return Response(
-                    {"error": f"Error de stock o SKU para {sku}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+                        producto = coleccion.find_one(
+                            {"sku": sku},
+                            session=session,
+                        )
 
-            precio_real = producto["precio"]
-            subtotal = precio_real * cantidad
-            total_orden += subtotal
+                        if not producto:
+                            raise StockInsuficienteError(
+                                f"Producto no encontrado: {sku}"
+                            )
 
-            items_a_guardar.append({
-                "sku": sku,
-                "cantidad": cantidad,
-                "precio": precio_real,
-                "subtotal": subtotal,
-            })
+                        stock_fisico = producto.get("stock_fisico")
+
+                        # Compatibilidad con el inventario actual:
+                        # stock_fisico puede existir y ser None.
+                        if stock_fisico is None:
+                            stock_fisico = producto.get("stock_inicial", 0)
+
+                        stock_reservado = producto.get("stock_reservado") or 0
+
+                        if stock_fisico - stock_reservado < cantidad:
+                            raise StockInsuficienteError(
+                                f"Stock insuficiente para {sku}"
+                            )
+
+                        # La condición se evalúa directamente en MongoDB.
+                        # Evita que dos solicitudes reserven las mismas unidades.
+                        filtro = {
+                            "sku": sku,
+                            "$expr": {
+                                "$gte": [
+                                    {
+                                        "$subtract": [
+                                            {
+                                                "$ifNull": [
+                                                    "$stock_fisico",
+                                                    "$stock_inicial",
+                                                ]
+                                            },
+                                            {
+                                                "$ifNull": [
+                                                    "$stock_reservado",
+                                                    0,
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    cantidad,
+                                ]
+                            },
+                        }
+
+                        resultado = coleccion.update_one(
+                            filtro,
+                            {"$inc": {"stock_reservado": cantidad}},
+                            session=session,
+                        )
+
+                        if resultado.modified_count != 1:
+                            raise StockInsuficienteError(
+                                f"No fue posible reservar el stock de {sku}"
+                            )
+
+                        reservas_aplicadas.append({
+                            "sku": sku,
+                            "cantidad": cantidad,
+                        })
+
+                        precio_real = producto["precio"]
+                        subtotal = precio_real * cantidad
+                        total_orden += subtotal
+
+                        items_a_guardar.append({
+                            "sku": sku,
+                            "cantidad": cantidad,
+                            "precio": precio_real,
+                            "subtotal": subtotal,
+                        })
+        except StockInsuficienteError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception:
+            return Response(
+                {"error": "No fue posible reservar el inventario"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         try:
             with transaction.atomic():
                 nueva_orden = OrdenDeCompra.objects.create(
-                    usuario_id=str(request.user.id) if request.user.is_authenticated else "Invitado",
+                    usuario_id=(
+                        str(request.user.id)
+                        if request.user.is_authenticated
+                        else "Invitado"
+                    ),
                     total_pagado=total_orden,
                     estado=EstadoOrden.PENDIENTE_PAGO,
                 )
 
-                for i in items_a_guardar:
+                for item in items_a_guardar:
                     ItemOrden.objects.create(
                         orden=nueva_orden,
-                        sku=i["sku"],
-                        cantidad=i["cantidad"],
-                        precio_unitario_fijo=i["precio"],
-                        subtotal=i["subtotal"],
+                        sku=item["sku"],
+                        cantidad=item["cantidad"],
+                        precio_unitario_fijo=item["precio"],
+                        subtotal=item["subtotal"],
                     )
+
         except Exception:
+            # PostgreSQL y MongoDB no comparten transacción.
+            # Si falla la creación de la orden, compensamos las reservas.
+            try:
+                with client.start_session() as session:
+                    with session.start_transaction():
+                        for reserva in reservas_aplicadas:
+                            coleccion.update_one(
+                                {"sku": reserva["sku"]},
+                                {
+                                    "$inc": {
+                                        "stock_reservado": -reserva["cantidad"]
+                                    }
+                                },
+                                session=session,
+                            )
+            except Exception:
+                return Response(
+                    {
+                        "error": (
+                            "Falló la creación de la orden y no fue posible "
+                            "liberar automáticamente todas las reservas"
+                        )
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
             return Response(
                 {"error": "Fallo en la persistencia transaccional"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -236,7 +354,7 @@ class ProcesarOrdenView(APIView):
 
         return Response(
             {
-                "mensaje": "Orden procesada y congelada exitosamente",
+                "mensaje": "Orden procesada y stock reservado exitosamente",
                 "orden_id": str(nueva_orden.id),
                 "estado": nueva_orden.estado,
                 "expira_en": nueva_orden.fecha_expiracion_reserva.isoformat(),
@@ -244,6 +362,7 @@ class ProcesarOrdenView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
 
 
 class TransicionarEstadoOrdenView(APIView):

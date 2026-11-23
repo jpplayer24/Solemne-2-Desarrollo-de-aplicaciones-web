@@ -92,7 +92,14 @@ class FakeProductosCollection:
 
         if "$expr" in filtro:
             requerido = filtro["$expr"]["$gte"][1]
-            disponible = doc.get("stock_fisico", 0) - doc.get("stock_reservado", 0)
+
+            stock_fisico = doc.get("stock_fisico")
+            if stock_fisico is None:
+                stock_fisico = doc.get("stock_inicial", 0)
+
+            stock_reservado = doc.get("stock_reservado") or 0
+            disponible = stock_fisico - stock_reservado
+
             if disponible < requerido:
                 return SimpleNamespace(modified_count=0)
 
@@ -133,6 +140,9 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
             "catalogo_core.views.get_productos_collection",
             return_value=self.fake_collection,
         )
+        self.patcher_views_client = patch(
+            "catalogo_core.views.client", self.fake_client
+        )
 
         self.patcher_rec_client.start()
         self.patcher_rec_col.start()
@@ -142,6 +152,7 @@ class MaquinaEstadosYConciliacionTests(APITestCase):
         self.patcher_rec_client.stop()
         self.patcher_rec_col.stop()
         self.patcher_views_col.stop()
+        self.patcher_views_client.stop()
 
     def _crear_orden_prueba(self, sku="MCH-URB-001", cantidad=1, precio=45000, expirada=False):
         expiracion = (

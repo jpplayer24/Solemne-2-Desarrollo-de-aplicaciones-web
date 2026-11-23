@@ -122,10 +122,15 @@ class FakeProductosCollection:
                 return SimpleNamespace(modified_count=0)
 
         if "$expr" in filtro:
-            expr_gte = filtro["$expr"]["$gte"]
-            campo_ref = expr_gte[0]["$subtract"][0].lstrip("$")
-            requerido = expr_gte[1]
-            disponible = doc.get(campo_ref, 0) - doc.get("stock_reservado", 0)
+            requerido = filtro["$expr"]["$gte"][1]
+
+            stock_fisico = doc.get("stock_fisico")
+            if stock_fisico is None:
+                stock_fisico = doc.get("stock_inicial", 0)
+
+            stock_reservado = doc.get("stock_reservado") or 0
+            disponible = stock_fisico - stock_reservado
+
             if disponible < requerido:
                 return SimpleNamespace(modified_count=0)
 
@@ -216,6 +221,7 @@ class CoberturaComercioYCatalogoTests(APITestCase):
 
         self.patchers = [
             patch("catalogo_core.reconciliation.client", self.fake_client),
+            patch("catalogo_core.views.client", self.fake_client),
             patch(
                 "catalogo_core.reconciliation.get_productos_collection",
                 return_value=self.fake_collection,
