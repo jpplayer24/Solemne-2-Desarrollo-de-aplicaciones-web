@@ -35,9 +35,15 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
   const rol = (localStorage.getItem('role') || 'VISITANTE').toUpperCase();
 
   // Función para cerrar sesión limpiando los datos guardados en el navegador
-  const cerrarSesion = () => {
+  const cerrarSesion = async () => {
+    try{
+      await axios.post('/api/auth/logout/', null, {
+        headers: { Authorization: `Token ${token}`},
+      });
+    } catch (e) {
+      //Token ya invalido, igual limpiamos
+    }
     localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
     localStorage.removeItem('role');
     navigate('/login');
   };

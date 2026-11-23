@@ -21,21 +21,20 @@ export default function Login() {
     setCargando(true);
 
     try {
-      const respuesta = await axios.post('http://localhost:8000/api/auth/login/', credenciales);
+      const respuesta = await axios.post('/api/auth/login/' , {
+        username: credenciales.email,
+        password: credenciales.password,
+      });
       const data = respuesta.data;
+      localStorage.setItem('token', data.token);
 
-      localStorage.setItem('token', data.access);
-      if (data.refresh) localStorage.setItem('refreshToken', data.refresh);
-
-      const rol = (data.user?.rol || data.user?.role || data.rol || data.role || 'CLIENTE').toUpperCase();
+      const rol = data.is_staff ? 'ADMIN' : 'CLIENTE';
       localStorage.setItem('role', rol);
 
-      if (rol === 'ADMIN') {
-        navigate('/admin', { replace: true });
-      } else {
-        const rutaOrigen = location.state?.from?.pathname || '/';
-        navigate(rutaOrigen, { replace: true });
-      }
+      const rutaOrigen = location.state?.from?.pathname || '/';
+      const destino = rol === 'ADMIN' ? '/admin' : rutaOrigen;
+      navigate(destino, {replace: true});
+
     } catch (error) {
       if (!error.response) {
         if (credenciales.email === 'admin@dreamhub.cl' && credenciales.password === 'admin123') {
@@ -53,7 +52,7 @@ export default function Login() {
         }
         setEstado('Error: No se pudo conectar con el servidor backend (DRF).');
       } else if (error.response.status === 401 || error.response.status === 400) {
-        setEstado(error.response.data?.detail || 'Credenciales inválidas o cuenta inactiva.');
+        setEstado(error.response.data?.error || 'Credenciales inválidas o cuenta inactiva.');
       } else if (error.response.status === 403) {
         setEstado('Cuenta bloqueada. Comuníquese con administración.');
       } else {
@@ -99,13 +98,13 @@ export default function Login() {
       <form onSubmit={manejarEnvio} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           <label htmlFor="email" style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)' }}>
-            Correo Electrónico
+            Nombre de Usuario
           </label>
           <input
-            type="email"
+            type="text"
             id="email"
             name="email"
-            placeholder="usuario@ejemplo.cl"
+            placeholder="Ingresa tu nombre de usuario"
             value={credenciales.email}
             onChange={manejarCambio}
             required

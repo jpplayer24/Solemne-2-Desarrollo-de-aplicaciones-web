@@ -18,26 +18,22 @@ export default function Checkout({ cartItems, onClearCart }) {
 
     const payloadOrden = {
       direccion_envio: direccion,
-      items: cartItems.map((item) => ({
-        producto_id: item.id,
-        cantidad: item.cantidad,
-        precio_unitario: item.precio,
-      })),
+      items: cartItems.map((item) => ({ sku: item.id, cantidad: item.cantidad})),
     };
 
     try {
-      // Petición estándar React + Django REST Framework con JWT
+      // Petición estándar React + Django REST Framework con TokenAuthentication
       const response = await axios.post(
-        'http://localhost:8000/api/comercio/ordenes/crear/',
+        '/ordenes/crear/',
         payloadOrden,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Token ${token}` },
         }
       );
 
       const ordenCreada = response.data;
       onClearCart();
-      navigate(`/confirmacion/${ordenCreada.id}`, { replace: true });
+      navigate(`/confirmacion/${ordenCreada.orden_id}`, { replace: true });
     } catch (err) {
       if (!err.response) {
         // Simulación local para probar validación de propiedad sin backend activo
@@ -61,7 +57,7 @@ export default function Checkout({ cartItems, onClearCart }) {
         onClearCart();
         navigate(`/confirmacion/${ordenSimuladaId}`, { replace: true });
       } else {
-        setError(err.response.data?.detail || 'No se pudo procesar la compra. Verifica el stock disponible.');
+        setError(err.response.data?.error || 'No se pudo procesar la compra. Verifica el stock disponible.');
       }
     } finally {
       setProcesando(false);
