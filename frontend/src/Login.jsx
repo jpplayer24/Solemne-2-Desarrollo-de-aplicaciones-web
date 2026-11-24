@@ -59,9 +59,10 @@ export default function Login() {
       const destino = rol === 'ADMIN' ? '/admin' : rutaOrigen;
       navigate(destino, { replace: true });
 
-    } catch (error) {
-      // Si el servidor backend no responde, usamos las cuentas de prueba locales
-      if (!error.response) {
+    }  catch (error) {
+      // Si el servidor backend no responde o Vite devuelve 404/502 porque Django no está encendido,
+      // usamos las cuentas de prueba locales para poder navegar y probar los roles
+      if (!error.response || error.response.status === 404 || error.response.status >= 500) {
         if (correoIngresado === 'admin@dreamhub.cl' && credenciales.password === 'admin123') {
           localStorage.setItem('token', 'simulated_admin_jwt_token');
           localStorage.setItem('role', 'ADMIN');
