@@ -132,3 +132,115 @@ body {
 h1, h2, h3, h4 {
   color: var(--text-main);
 }
+
+/* ==========================================================================
+   RNF-06: Eliminación de scroll horizontal en 360px, 768px y 1440px
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root, .app-container {
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Clases responsivas para evitar columnas rígidas en pantallas de 360px */
+.navbar-principal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.grid-dos-columnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .navbar-principal {
+    padding: 0.75rem 1rem;
+  }
+  .grid-dos-columnas {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .navbar-principal {
+    padding: 0.6rem 0.75rem;
+  }
+}
+
+/* ==========================================================================
+   tarea semana 8: Accesibilidad WCAG - Contraste en 4 temas y Foco Visible por Teclado
+   ========================================================================== */
+
+/* Ajuste de contraste WCAG AA (>= 4.5:1) para textos secundarios en los 4 temas */
+[data-theme="desert-canvas"] {
+  --text-main: #1c1917;
+  --text-muted: #44403c;
+}
+
+[data-theme="arctic-alpine"] {
+  --text-main: #0f172a;
+  --text-muted: #334155;
+}
+
+[data-theme="stealth-black"] {
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+}
+
+[data-theme="forest-cordura"] {
+  --text-main: #f0fdf4;
+  --text-muted: #bbf7d0;
+}
+
+/* Anillo de foco visible de alto contraste al navegar con tecla Tab */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--primary) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px rgba(217, 119, 6, 0.25);
+}
+
+/* Enlace de salto rápido al contenido principal para lectores de pantalla y teclado */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  background-color: var(--primary);
+  color: #ffffff;
+  padding: 0.6rem 1rem;
+  z-index: 999;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 0.75rem;
+}
