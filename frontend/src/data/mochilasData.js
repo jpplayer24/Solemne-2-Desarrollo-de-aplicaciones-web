@@ -1,5 +1,6 @@
 // ============================================================================
-// Base de datos local de 50 Mochilas - DreamHUB
+// Base de datos local de 50 Mochilas con textos alternativos WCAG (RNF-07)
+// Estudiante: Kamila Castillo Montes
 // ============================================================================
 
 const imagenesBase = [
@@ -24,7 +25,6 @@ const sufijosModelo = [
   'Summit Elite', 'Glaciar', 'Atacama', 'Trailblazer', 'Vanguard'
 ];
 
-// Las 2 mochilas principales iniciales
 const mochilasIniciales = [
   {
     id: 'mochila-trekking-65l',
@@ -36,7 +36,13 @@ const mochilasIniciales = [
     stock_fisico: 12,
     stock_reservado: 2,
     badge: 'Más Vendida',
-    imagenes: [imagenesBase[0], imagenesBase[1], imagenesBase[2], imagenesBase[3]]
+    imagenes: [imagenesBase[0], imagenesBase[1], imagenesBase[2], imagenesBase[3]],
+    alt_imagenes: [
+      'Vista frontal de la Mochila Trekking 65L Andina en tela oscura impermeable con bolsillo frontal con cierre',
+      'Detalle lateral de las correas de compresión y acolchado lumbar de la Mochila Trekking 65L Andina',
+      'Compartimento superior y costuras reforzadas Ripstop de la Mochila Trekking 65L Andina',
+      'Vista trasera mostrando el sistema de ventilación de espalda y tirantes ergonómicos de 65 litros'
+    ]
   },
   {
     id: 'mochila-urbana-25l',
@@ -48,20 +54,25 @@ const mochilasIniciales = [
     stock_fisico: 18,
     stock_reservado: 1,
     badge: 'Impermeable',
-    imagenes: [imagenesBase[1], imagenesBase[2], imagenesBase[4], imagenesBase[0]]
+    imagenes: [imagenesBase[1], imagenesBase[2], imagenesBase[4], imagenesBase[0]],
+    alt_imagenes: [
+      'Vista frontal minimalista de la Mochila Urbana Stealth 25L con acabado mate resistente al agua',
+      'Apertura del compartimento acolchado para computador portátil de hasta 16 pulgadas',
+      'Detalle de cierres estancos y bolsillo oculto antirrobo de la Mochila Urbana Stealth 25L',
+      'Vista de perfil mostrando las correas ajustables acolchadas para uso diario en ciudad'
+    ]
   }
 ];
 
-// Generación de las 48 mochilas adicionales para completar 50 opciones
 const mochilasGeneradas = Array.from({ length: 48 }, (_, index) => {
-  const num = index + 3; // Del 3 al 50
+  const num = index + 3;
   const config = categoriasConfig[index % categoriasConfig.length];
   const sufijo = sufijosModelo[index % sufijosModelo.length];
   const litros = config.capacidades[index % config.capacidades.length];
   const precioCalculado = config.basePrecio + ((index % 5) * 4500);
   const imgPrincipal = imagenesBase[index % imagenesBase.length];
+  const nombreCompleto = `${config.prefijo} ${litros}L ${sufijo}`;
 
-  // Rotamos las imágenes para que cada mochila tenga una galería de 4 vistas
   const galeria = [
     imgPrincipal,
     imagenesBase[(index + 1) % imagenesBase.length],
@@ -69,9 +80,17 @@ const mochilasGeneradas = Array.from({ length: 48 }, (_, index) => {
     imagenesBase[(index + 3) % imagenesBase.length]
   ];
 
+  // Generamos 4 descripciones alt únicas por producto para cumplir WCAG 1.1.1
+  const descripcionesAlt = [
+    `Vista frontal principal de ${nombreCompleto}, capacidad de ${litros} litros para ${config.cat.toLowerCase()}`,
+    `Detalle lateral y correas de ajuste reforzadas de ${nombreCompleto}`,
+    `Vista interior de los compartimentos organizadores y cierres sellados de ${nombreCompleto}`,
+    `Respaldo ergonómico acolchado y tirantes respirables de ${nombreCompleto}`
+  ];
+
   return {
     id: `mochila-${config.tipo.toLowerCase()}-${litros}l-${num}`,
-    nombre: `${config.prefijo} ${litros}L ${sufijo}`,
+    nombre: nombreCompleto,
     categoria: config.cat,
     precio: precioCalculado,
     capacidad_litros: litros,
@@ -79,7 +98,8 @@ const mochilasGeneradas = Array.from({ length: 48 }, (_, index) => {
     stock_fisico: 5 + (index % 15),
     stock_reservado: index % 3,
     badge: config.badge,
-    imagenes: galeria
+    imagenes: galeria,
+    alt_imagenes: descripcionesAlt
   };
 });
 
