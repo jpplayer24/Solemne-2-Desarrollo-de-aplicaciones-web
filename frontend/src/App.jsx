@@ -22,6 +22,8 @@ import ImportarCSV from './components/ImportarCSV';
 // Importamos nuestro hook personalizado del carrito
 import { useCart } from './hooks/useCart';
 
+import { LISTA_MOCHILAS } from './data/mochilasData';
+
 // ============================================================================
 // Componente: BarraNavegacion
 // Muestra el logo, los enlaces principales, el botón del carrito y el control de sesión
@@ -208,10 +210,14 @@ function CatalogoView() {
           };
         });
 
-        setProductos(productosAdaptados);
-      } catch (err) {
-        console.error('Error al cargar el catálogo:', err);
-        setError('No pudimos cargar los productos. Intenta nuevamente.');
+        } catch (err) {
+        // Si el backend Django no está activo, cargamos el catálogo local de 50 mochilas
+        const productosRespaldo = LISTA_MOCHILAS.map((item) => ({
+          ...item,
+          sku: item.id,
+        }));
+        setProductos(productosRespaldo);
+        setError('');
       } finally {
         setLoading(false);
       }
