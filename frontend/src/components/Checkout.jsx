@@ -79,7 +79,7 @@ export default function Checkout({ cartItems, onClearCart }) {
     <div style={{ maxWidth: '900px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
       <h1 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Resumen y Confirmación de Compra</h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem', alignItems: 'start' }}>
+      <div className="grid-dos-columnas">
         <form
           onSubmit={manejarConfirmacionCompra}
           style={{
