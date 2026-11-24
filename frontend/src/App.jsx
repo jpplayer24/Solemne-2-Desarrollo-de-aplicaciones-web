@@ -18,11 +18,10 @@ import CarritoModal from './components/CarritoModal';
 import Checkout from './components/Checkout';
 import ConfirmacionOrden from './components/ConfirmacionOrden';
 import ImportarCSV from './components/ImportarCSV';
-
-// Importamos nuestro hook personalizado del carrito
-import { useCart } from './hooks/useCart';
 import GestionUsuarios from './components/GestionUsuarios';
 
+// Importamos nuestro hook personalizado del carrito y el respaldo local de mochilas
+import { useCart } from './hooks/useCart';
 import { LISTA_MOCHILAS } from './data/mochilasData';
 
 // ============================================================================
@@ -44,10 +43,11 @@ function BarraNavegacion({ onOpenCarrito, cantidadTotal }) {
         headers: { Authorization: `Token ${token}` },
       });
     } catch (e) {
-      // Token ya inválido, igual limpiamos
+      // Token ya inválido, igual limpiamos el almacenamiento local
     }
     localStorage.removeItem('token');
     localStorage.removeItem('role');
+    localStorage.removeItem('user_email');
     navigate('/login');
   };
 
@@ -211,7 +211,8 @@ function CatalogoView() {
           };
         });
 
-        } catch (err) {
+        setProductos(productosAdaptados);
+      } catch (err) {
         // Si el backend Django no está activo, cargamos el catálogo local de 50 mochilas
         const productosRespaldo = LISTA_MOCHILAS.map((item) => ({
           ...item,
@@ -227,7 +228,7 @@ function CatalogoView() {
     cargarProductos();
   }, []);
 
-  // Filtrar los productos obtenidos desde MongoDB
+  // Filtrar los productos obtenidos desde MongoDB o respaldo local
   const mochilasFiltradas = productos.filter((m) => {
     const coincideTexto = m.nombre
       .toLowerCase()
@@ -468,10 +469,10 @@ function CatalogoView() {
 
 // ============================================================================
 // Componente: AdminDashboard
-// Panel exclusivo para usuarios con rol ADMIN (CMS, carga CSV y auditoría de órdenes)
+// Panel exclusivo para usuarios con rol ADMIN (CMS, CSV, Órdenes y Usuarios RF-14)
 // ============================================================================
 function AdminDashboard() {
-  // Estado para cambiar entre las 3 pestañas del administrador
+  // Estado para cambiar entre las 4 pestañas del administrador
   const [pestana, setPestana] = useState('cms');
   // Estados para editar los textos de la portada (RF-02)
   const [tituloBanner, setTituloBanner] = useState('Equipamiento Táctico y Urbano de Alto Rendimiento');
@@ -499,7 +500,7 @@ function AdminDashboard() {
           Panel de Administración DreamHUB
         </h1>
         <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-          Gestión de contenidos públicos (CMS), carga masiva CSV y auditoría de órdenes.
+          Gestión de contenidos públicos (CMS), carga masiva CSV, auditoría de órdenes y bloqueo seguro de usuarios.
         </p>
       </div>
 
@@ -531,6 +532,15 @@ function AdminDashboard() {
           className={pestana === 'ordenes' ? 'btn-primary' : 'btn-secondary'}
         >
           Auditar Órdenes ({ordenesTotales.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pestana === 'usuarios'}
+          onClick={() => setPestana('usuarios')}
+          className={pestana === 'usuarios' ? 'btn-primary' : 'btn-secondary'}
+        >
+          Gestionar Usuarios (RF-14)
         </button>
       </div>
 
@@ -651,6 +661,9 @@ function AdminDashboard() {
           )}
         </div>
       )}
+
+      {/* Vista 4: Gestión y bloqueo seguro de usuarios (RF-14 / RB-06) */}
+      {pestana === 'usuarios' && <GestionUsuarios />}
     </section>
   );
 }
