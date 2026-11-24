@@ -1,7 +1,4 @@
-// ============================================================================
-// Base de datos local de 50 Mochilas con textos alternativos WCAG (RNF-07)
-// Estudiante: Kamila Castillo Montes
-// ============================================================================
+
 
 const imagenesBase = [
   'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80',
