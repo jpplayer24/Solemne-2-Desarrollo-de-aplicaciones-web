@@ -1,25 +1,34 @@
 # backend_catalogo/catalogo_core/views.py
+from bson.objectid import ObjectId
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.utils.crypto import get_random_string
 from rest_framework import status
 from rest_framework.decorators import api_view
-from rest_framework.permissions import AllowAny
-from bson.objectid import ObjectId
-
+from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .db_mongo import client, db, get_productos_collection
+from .models import EstadoOrden, ItemOrden, OrdenDeCompra
+from .reconciliation import ErrorConciliacion, conciliar_pago_orden
 from .serializers import ItemCarritoSerializer, ProductoSerializer
-from .db_mongo import get_productos_collection, db, check_mongo_connection
-from .models import OrdenDeCompra, ItemOrden
+
+
+def _obtener_stock_disponible(producto):
+    stock_total = (
+        producto.get("stock_fisico", 0)
+        if "stock_fisico" in producto
+        else producto.get("stock_inicial", 0)
+    )
+    return stock_total - producto.get("stock_reservado", 0)
 
 
 @api_view(['GET'])
 def listar_productos_paginado(request):
-
     try:
         coleccion = get_productos_collection()
 
-        # Parámetros de paginación desde la petición
         try:
             pagina = int(request.GET.get('page', 1))
             limite = int(request.GET.get('limit', 10))
@@ -37,31 +46,32 @@ def listar_productos_paginado(request):
 
         skip = (pagina - 1) * limite
 
-        # Filtro: Productos donde estado_activo sea verdadero
-        filtro = {
-            "$or": [
-                {"estado_activo": True},
-                {"activo": True},
-                {"status": "published"}
-            ]
-        }
+        filtro = {"estado_activo": True}
 
         total_productos = coleccion.count_documents(filtro)
         cursor = coleccion.find(filtro, {"_id": 0}).skip(skip).limit(limite)
         productos = list(cursor)
 
+        for producto in productos:
+            stock_disponible = _obtener_stock_disponible(producto)
+            producto["stock_disponible"] = max(0, stock_disponible)
+            producto["disponible"] = stock_disponible > 0
+
         total_paginas = (total_productos + limite - 1) // limite
 
-        return JsonResponse({
-            "status": "success",
-            "paginacion": {
-                "total_registros": total_productos,
-                "total_paginas": total_paginas,
-                "pagina_actual": pagina,
-                "por_pagina": limite
+        return JsonResponse(
+            {
+                "status": "success",
+                "paginacion": {
+                    "total_registros": total_productos,
+                    "total_paginas": total_paginas,
+                    "pagina_actual": pagina,
+                    "por_pagina": limite,
+                },
+                "data": productos,
             },
-            "data": productos
-        }, status=200)
+            status=200,
+        )
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -72,24 +82,30 @@ def detalle_producto(request, producto_id):
     try:
         coleccion = get_productos_collection()
 
-        # Buscar por ObjectId o por campo inmutable SKU
         producto = None
         if ObjectId.is_valid(producto_id):
-            producto = coleccion.find_one({"_id": ObjectId(producto_id)})
-        
+            producto = coleccion.find_one({
+                "_id": ObjectId(producto_id),
+                "estado_activo": True
+            })
+
         if not producto:
-            producto = coleccion.find_one({"sku": producto_id})
+            producto = coleccion.find_one({
+                "sku": producto_id,
+                "estado_activo": True
+            })
 
         if not producto:
             return JsonResponse({"status": "error", "message": "Mochila no encontrada."}, status=404)
 
+        stock_disponible = _obtener_stock_disponible(producto)
+        producto["stock_disponible"] = max(0, stock_disponible)
+        producto["disponible"] = stock_disponible > 0
+
         if "_id" in producto:
             producto["id"] = str(producto.pop("_id"))
 
-        return JsonResponse({
-            "status": "success",
-            "data": producto
-        }, status=200)
+        return JsonResponse({"status": "success", "data": producto}, status=200)
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
@@ -99,7 +115,6 @@ class SincronizarCarritoView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # 1. Validar entrada (array de items con "sku" y "cantidad")
         serializer = ItemCarritoSerializer(data=request.data, many=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -107,18 +122,16 @@ class SincronizarCarritoView(APIView):
         items_entrantes = serializer.validated_data
         coleccion_productos = get_productos_collection()
         coleccion_carritos = db["carritos"]
-        
+
         usuario_id = str(request.user.id) if request.user.is_authenticated else None
         carrito_matematico = {}
 
-        # 2. SCRUM-49: Si hay usuario autenticado, recuperar carrito de MongoDB Atlas
         if usuario_id:
             carrito_db = coleccion_carritos.find_one({"usuario_id": usuario_id})
             if carrito_db:
                 for item in carrito_db.get("items", []):
                     carrito_matematico[item["sku"]] = item["cantidad"]
 
-        # 3. SCRUM-49: Fusionar (sumar) el carrito local entrante con el persistido
         for item in items_entrantes:
             sku = item["sku"]
             cantidad = item["cantidad"]
@@ -127,150 +140,398 @@ class SincronizarCarritoView(APIView):
             else:
                 carrito_matematico[sku] = cantidad
 
-        # 4. SCRUM-48: Calcular valores usando la fuente de verdad en MongoDB
         total_dinero = 0
         detalle_boleta = []
         items_finales_para_guardar = []
 
         for sku, cantidad in carrito_matematico.items():
             producto = coleccion_productos.find_one({"sku": sku})
-            
-            # Verificar existencia y stock disponible contra el inventario
-            if not producto or producto.get("stock_inicial", 0) < cantidad:
-                continue 
-            
+            if not producto or _obtener_stock_disponible(producto) < cantidad:
+                continue
+
             precio_real = producto["precio"]
             subtotal = precio_real * cantidad
             total_dinero += subtotal
-            
+
             detalle_boleta.append({
                 "sku": sku,
                 "nombre": producto.get("nombre", "Sin nombre"),
                 "cantidad": cantidad,
                 "precio_unitario": precio_real,
-                "subtotal": subtotal
+                "subtotal": subtotal,
             })
-            
+
             items_finales_para_guardar.append({"sku": sku, "cantidad": cantidad})
 
-        # 5. Persistir el carrito en MongoDB si el usuario está autenticado
         if usuario_id:
             coleccion_carritos.update_one(
                 {"usuario_id": usuario_id},
                 {"$set": {"items": items_finales_para_guardar}},
-                upsert=True
+                upsert=True,
             )
 
-        return Response({
-            "detalle": detalle_boleta,
-            "total_carrito": total_dinero
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {"detalle": detalle_boleta, "total_carrito": total_dinero},
+            status=status.HTTP_200_OK,
+        )
 
+class StockInsuficienteError(Exception):
+    """Se produce cuando no es posible reservar todo el stock solicitado."""
 
 class ProcesarOrdenView(APIView):
     def post(self, request):
-        items = request.data.get('items', [])
-        if not items:
-            return Response({"error": "El carrito está vacío"}, status=status.HTTP_400_BAD_REQUEST)
+        items = request.data.get("items", [])
+
+        if not isinstance(items, list) or not items:
+            return Response(
+                {"error": "El carrito está vacío"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ItemCarritoSerializer(data=items, many=True)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         coleccion = get_productos_collection()
         total_orden = 0
         items_a_guardar = []
+        reservas_aplicadas = []
 
-        # 1. Recálculo estricto en el servidor
-        for item in items:
-            sku = item.get('sku')
-            cantidad = item.get('cantidad', 1)
-            
-            producto = coleccion.find_one({"sku": sku})
-            if not producto or producto.get("stock_inicial", 0) < cantidad:
-                return Response({"error": f"Error de stock o SKU para {sku}"}, status=status.HTTP_400_BAD_REQUEST)
-            
-            precio_real = producto["precio"]
-            subtotal = precio_real * cantidad
-            total_orden += subtotal
-            
-            items_a_guardar.append({
-                "sku": sku,
-                "cantidad": cantidad,
-                "precio": precio_real,
-                "subtotal": subtotal
-            })
+        try:
+            # Una transacción MongoDB garantiza que se reservan
+            # todos los productos o ninguno.
+            with client.start_session() as session:
+                with session.start_transaction():
+                    for item in serializer.validated_data:
+                        sku = item["sku"]
+                        cantidad = item["cantidad"]
 
-        # 2. Guardado transaccional en PostgreSQL
+                        producto = coleccion.find_one(
+                            {"sku": sku},
+                            session=session,
+                        )
+
+                        if not producto:
+                            raise StockInsuficienteError(
+                                f"Producto no encontrado: {sku}"
+                            )
+
+                        stock_fisico = producto.get("stock_fisico")
+
+                        # Compatibilidad con el inventario actual:
+                        # stock_fisico puede existir y ser None.
+                        if stock_fisico is None:
+                            stock_fisico = producto.get("stock_inicial", 0)
+
+                        stock_reservado = producto.get("stock_reservado") or 0
+
+                        if stock_fisico - stock_reservado < cantidad:
+                            raise StockInsuficienteError(
+                                f"Stock insuficiente para {sku}"
+                            )
+
+                        # La condición se evalúa directamente en MongoDB.
+                        # Evita que dos solicitudes reserven las mismas unidades.
+                        filtro = {
+                            "sku": sku,
+                            "$expr": {
+                                "$gte": [
+                                    {
+                                        "$subtract": [
+                                            {
+                                                "$ifNull": [
+                                                    "$stock_fisico",
+                                                    "$stock_inicial",
+                                                ]
+                                            },
+                                            {
+                                                "$ifNull": [
+                                                    "$stock_reservado",
+                                                    0,
+                                                ]
+                                            },
+                                        ]
+                                    },
+                                    cantidad,
+                                ]
+                            },
+                        }
+
+                        resultado = coleccion.update_one(
+                            filtro,
+                            {"$inc": {"stock_reservado": cantidad}},
+                            session=session,
+                        )
+
+                        if resultado.modified_count != 1:
+                            raise StockInsuficienteError(
+                                f"No fue posible reservar el stock de {sku}"
+                            )
+
+                        reservas_aplicadas.append({
+                            "sku": sku,
+                            "cantidad": cantidad,
+                        })
+
+                        precio_real = producto["precio"]
+                        subtotal = precio_real * cantidad
+                        total_orden += subtotal
+
+                        items_a_guardar.append({
+                            "sku": sku,
+                            "cantidad": cantidad,
+                            "precio": precio_real,
+                            "subtotal": subtotal,
+                        })
+        except StockInsuficienteError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception:
+            return Response(
+                {"error": "No fue posible reservar el inventario"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         try:
             with transaction.atomic():
                 nueva_orden = OrdenDeCompra.objects.create(
-                    usuario_id=str(request.user.id) if request.user.is_authenticated else "Invitado",
-                    total_pagado=total_orden
+                    usuario_id=(
+                        str(request.user.id)
+                        if request.user.is_authenticated
+                        else "Invitado"
+                    ),
+                    total_pagado=total_orden,
+                    estado=EstadoOrden.PENDIENTE_PAGO,
                 )
-                
-                for i in items_a_guardar:
+
+                for item in items_a_guardar:
                     ItemOrden.objects.create(
                         orden=nueva_orden,
-                        sku=i["sku"],
-                        cantidad=i["cantidad"],
-                        precio_unitario_fijo=i["precio"],
-                        subtotal=i["subtotal"]
+                        sku=item["sku"],
+                        cantidad=item["cantidad"],
+                        precio_unitario_fijo=item["precio"],
+                        subtotal=item["subtotal"],
                     )
-        except Exception as e:
-            return Response({"error": f"Fallo en la persistencia transaccional: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({
-            "mensaje": "Orden procesada y congelada exitosamente",
-            "orden_id": nueva_orden.id,
-            "total": total_orden
-        }, status=status.HTTP_201_CREATED)
+        except Exception:
+            # PostgreSQL y MongoDB no comparten transacción.
+            # Si falla la creación de la orden, compensamos las reservas.
+            try:
+                with client.start_session() as session:
+                    with session.start_transaction():
+                        for reserva in reservas_aplicadas:
+                            coleccion.update_one(
+                                {"sku": reserva["sku"]},
+                                {
+                                    "$inc": {
+                                        "stock_reservado": -reserva["cantidad"]
+                                    }
+                                },
+                                session=session,
+                            )
+            except Exception:
+                return Response(
+                    {
+                        "error": (
+                            "Falló la creación de la orden y no fue posible "
+                            "liberar automáticamente todas las reservas"
+                        )
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-class CrearProductoView(APIView):
-        # Para pruebas usar AllowAny en vez de isAdminUser.
-    permission_classes = [isAdminUser] 
+            return Response(
+                {"error": "Fallo en la persistencia transaccional"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-    def post(self, request):
-        datos = request.data
-        coleccion = get_productos_collection()
+        return Response(
+            {
+                "mensaje": "Orden procesada y stock reservado exitosamente",
+                "orden_id": str(nueva_orden.id),
+                "estado": nueva_orden.estado,
+                "expira_en": nueva_orden.fecha_expiracion_reserva.isoformat(),
+                "total": total_orden,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+
+class TransicionarEstadoOrdenView(APIView):
+    """SCRUM-61: Ejecuta transiciones controladas sobre la máquina de estados de una orden."""
+
+    def post(self, request, orden_id):
+        nuevo_estado = request.data.get("estado")
+        motivo = request.data.get("motivo", "")
+
+        if not nuevo_estado:
+            return Response(
+                {"error": "El campo 'estado' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            try:
+                orden = OrdenDeCompra.objects.select_for_update().get(id=orden_id)
+            except OrdenDeCompra.DoesNotExist:
+                return Response(
+                    {"error": f"Orden '{orden_id}' no encontrada."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            estado_anterior = orden.estado
+            try:
+                orden.transicionar_estado(nuevo_estado, motivo=motivo)
+            except ValidationError as exc:
+                return Response(
+                    {"error": exc.messages[0]},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        return Response(
+            {
+                "orden_id": str(orden.id),
+                "estado_anterior": estado_anterior,
+                "estado_actual": orden.estado,
+                "motivo": orden.motivo_estado,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ConciliarPagoOrdenView(APIView):
+    """SCRUM-64: Concilia pagos confirmados/tardíos y deriva a REVISION_REQUERIDA sin stock negativo."""
+
+    def post(self, request, orden_id):
+        monto_pagado = request.data.get("monto_pagado")
+        pago_referencia = request.data.get("pago_referencia")
+        pago_aprobado = request.data.get("pago_aprobado", True)
+
+        if not isinstance(monto_pagado, int) or isinstance(monto_pagado, bool) or monto_pagado <= 0:
+            return Response(
+                {"error": "El campo 'monto_pagado' debe ser un entero positivo en CLP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not pago_referencia or not isinstance(pago_referencia, str):
+            return Response(
+                {"error": "El campo 'pago_referencia' es obligatorio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not isinstance(pago_aprobado, bool):
+            return Response(
+                {"error": "El campo 'pago_aprobado' debe ser booleano."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
-            precio = int(datos.get("precio", 0))
-            stock_fisico = int(datos.get("stock_inicial", -1))
-        except ValueError:
-            return Response({"error": "Precio y stock deben ser números enteros."}, status=status.HTTP_400_BAD_REQUEST)
+            resultado = conciliar_pago_orden(
+                orden_id=orden_id,
+                monto_pagado=monto_pagado,
+                pago_referencia=pago_referencia,
+                pago_aprobado=pago_aprobado,
+            )
+            return Response(resultado, status=status.HTTP_200_OK)
+        except ErrorConciliacion as exc:
+            return Response({"error": exc.mensaje}, status=exc.status_code)
 
-        if precio <= 0 or stock_fisico < 0:
-            return Response({"error": "Precio debe ser > 0 y stock físico >= 0."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not datos.get("nombre", "").strip() or not datos.get("descripcion", "").strip():
-            return Response({"error": "Nombre y descripción no pueden estar vacíos."}, status=status.HTTP_400_BAD_REQUEST)
+class ListarOrdenesRevisionView(APIView):
+    """Lista las órdenes en REVISION_REQUERIDA para el panel administrativo de conciliación."""
 
-        imagenes = datos.get("imagenes", [])
-        if not isinstance(imagenes, list) or len(imagenes) < 4 or len(imagenes) > 6:
-            return Response({"error": "El producto debe tener entre 4 y 6 imágenes válidas."}, status=status.HTTP_400_BAD_REQUEST)
+    def get(self, request):
+        ordenes = (
+            OrdenDeCompra.objects.filter(estado=EstadoOrden.REVISION_REQUERIDA)
+            .prefetch_related('items')
+            .order_by('-fecha_actualizacion')
+        )
+        data = [
+            {
+                "orden_id": str(orden.id),
+                "usuario_id": orden.usuario_id,
+                "total_pagado": orden.total_pagado,
+                "pago_referencia": orden.pago_referencia,
+                "pago_confirmado_externo": orden.pago_confirmado_externo,
+                "motivo_estado": orden.motivo_estado,
+                "fecha_creacion": orden.fecha_creacion.isoformat(),
+                "items": [
+                    {
+                        "sku": item.sku,
+                        "cantidad": item.cantidad,
+                        "precio_unitario_fijo": item.precio_unitario_fijo,
+                        "subtotal": item.subtotal,
+                    }
+                    for item in orden.items.all()
+                ],
+            }
+            for orden in ordenes
+        ]
+        return Response({"total": len(data), "ordenes": data}, status=status.HTTP_200_OK)
 
-        sku = datos.get("sku", get_random_string(length=10).upper())
 
+class CrearProductoView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        datos = request.data.copy()
+
+        # Generar SKU si no viene informado
+        sku = datos.get("sku")
+        if not isinstance(sku, str) or not sku.strip():
+            datos["sku"] = get_random_string(length=10).upper()
+
+        if not datos.get("categoria_id"):
+            datos["categoria_id"] = "GENERAL"
+
+        coleccion = get_productos_collection()
+
+        # Validar mediante el serializador DRF
+        serializer = ProductoSerializer(data=datos)
+
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        datos_validados = serializer.validated_data
+        sku = datos_validados["sku"]
+
+        # Comprobar SKU duplicado
         if coleccion.find_one({"sku": sku}):
-            return Response({"error": "Ya existe un producto con este identificador (SKU)."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Ya existe un producto con este identificador (SKU)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-      
         nuevo_producto = {
-            "sku": sku,
-            "nombre": datos.get("nombre").strip(),
-            "descripcion": datos.get("descripcion").strip(),
-            "categoria_id": datos.get("categoria_id", "GENERAL"),
-            "precio": precio,
-            "stock_inicial": stock_fisico,  
-            "stock_reservado": 0,           
-            "moneda": datos.get("moneda", "CLP"),
-            "imagenes": imagenes,
-            "estado_activo": datos.get("estado_activo", True)
+            **datos_validados,
+            "stock_reservado": 0,
         }
 
         try:
             coleccion.insert_one(nuevo_producto)
             nuevo_producto.pop("_id", None)
-            return Response({
-                "mensaje": "Producto creado exitosamente",
-                "producto": nuevo_producto
-            }, status=status.HTTP_201_CREATED)
+
+            return Response(
+                {
+                    "mensaje": "Producto creado exitosamente",
+                    "producto": nuevo_producto,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
         except Exception as e:
-            return Response({"error": f"Fallo al guardar en MongoDB: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": f"Fallo al guardar en MongoDB: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
