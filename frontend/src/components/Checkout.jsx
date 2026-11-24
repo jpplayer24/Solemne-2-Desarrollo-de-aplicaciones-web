@@ -1,3 +1,8 @@
+// ============================================================================
+// Componente: Checkout
+// Muestra el resumen de compra, valida que el actor sea cliente (CC-02)
+// y genera la orden asociándola al propietario autenticado (RF-27 / RF-28)
+// ============================================================================
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -9,20 +14,31 @@ export default function Checkout({ cartItems, onClearCart }) {
   const [error, setError] = useState(null);
 
   const token = localStorage.getItem('token');
+  const rolActual = (localStorage.getItem('role') || '').toUpperCase();
+  const emailActual = (localStorage.getItem('user_email') || 'cliente@dreamhub.cl').toLowerCase();
+
+  // Calculamos el total visual en pesos chilenos (el backend lo revalida con CC-06)
   const totalCLP = cartItems.reduce((acc, item) => acc + item.precio * item.cantidad, 0);
 
   const manejarConfirmacionCompra = async (e) => {
     e.preventDefault();
     setError(null);
+
+    // Regla de negocio CC-02: Las cuentas administradoras no pueden ejecutar compras
+    if (rolActual === 'ADMIN') {
+      setError('Operación no permitida (CC-02): Las cuentas administradoras no pueden realizar compras.');
+      return;
+    }
+
     setProcesando(true);
 
     const payloadOrden = {
       direccion_envio: direccion,
-      items: cartItems.map((item) => ({ sku: item.id, cantidad: item.cantidad})),
+      items: cartItems.map((item) => ({ sku: item.id, cantidad: item.cantidad })),
     };
 
     try {
-      // Petición estándar React + Django REST Framework con TokenAuthentication
+      // Petición real React + Django REST Framework con TokenAuthentication
       const response = await axios.post(
         '/ordenes/crear/',
         payloadOrden,
@@ -36,13 +52,12 @@ export default function Checkout({ cartItems, onClearCart }) {
       navigate(`/confirmacion/${ordenCreada.orden_id}`, { replace: true });
     } catch (err) {
       if (!err.response) {
-        // Simulación local para probar validación de propiedad sin backend activo
+        // Respaldo local cuando Django no está levantado para probar validación de propiedad
         const ordenSimuladaId = 'ORD-2026-884';
-        const usuarioActual = token === 'simulated_admin_jwt_token' ? 'admin@dreamhub.cl' : 'cliente@dreamhub.cl';
 
         const ordenLocal = {
           id: ordenSimuladaId,
-          propietario_email: usuarioActual,
+          propietario_email: emailActual,
           fecha: new Date().toLocaleDateString('es-CL'),
           estado: 'CONFIRMADA Y PAGADA',
           direccion_envio: direccion,
@@ -66,19 +81,22 @@ export default function Checkout({ cartItems, onClearCart }) {
 
   if (cartItems.length === 0) {
     return (
-      <div style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center', padding: '2rem' }}>
+      <section style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center', padding: '2rem' }}>
         <h2>No hay mochilas en tu resumen de compra</h2>
-        <button onClick={() => navigate('/catalogo')} className="btn-primary" style={{ marginTop: '1rem' }}>
+        <button type="button" onClick={() => navigate('/catalogo')} className="btn-primary" style={{ marginTop: '1rem' }}>
           Volver al Catálogo
         </button>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div style={{ maxWidth: '900px', margin: '2.5rem auto', padding: '0 1.5rem' }}>
-      <h1 style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>Resumen y Confirmación de Compra</h1>
+    <section aria-labelledby="titulo-checkout" style={{ maxWidth: '900px', margin: '2.5rem auto', padding: '0 1rem' }}>
+      <h1 id="titulo-checkout" style={{ marginBottom: '1.5rem', color: 'var(--text-main)' }}>
+        Resumen y Confirmación de Compra
+      </h1>
 
+      {/* Usamos grid-dos-columnas para mantener responsividad en 360px, 768px y 1440px (RNF-06) */}
       <div className="grid-dos-columnas">
         <form
           onSubmit={manejarConfirmacionCompra}
@@ -89,7 +107,8 @@ export default function Checkout({ cartItems, onClearCart }) {
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Datos de Envío</h3>
+          <h2 style={{ marginTop: 0, fontSize: '1.25rem' }}>Datos de Envío</h2>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
             <label htmlFor="direccion" style={{ fontSize: '0.9rem', fontWeight: '600' }}>
               Dirección completa de entrega (Chile)
@@ -98,10 +117,11 @@ export default function Checkout({ cartItems, onClearCart }) {
               id="direccion"
               type="text"
               required
-              placeholder="Ej: Av. Coliflores 1412, puchuncaví "
+              placeholder="Ej: Av. Coliflores 1412, Puchuncaví"
               value={direccion}
               onChange={(e) => setDireccion(e.target.value)}
               style={{
+                width: '100%',
                 padding: '0.75rem',
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-subtle)',
@@ -112,7 +132,7 @@ export default function Checkout({ cartItems, onClearCart }) {
           </div>
 
           {error && (
-            <div style={{ color: '#ef4444', marginBottom: '1rem', fontSize: '0.9rem' }}>
+            <div role="alert" aria-live="assertive" style={{ color: '#ef4444', marginBottom: '1rem', fontSize: '0.9rem', fontWeight: '600' }}>
               {error}
             </div>
           )}
@@ -130,10 +150,11 @@ export default function Checkout({ cartItems, onClearCart }) {
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Mochilas Seleccionadas</h3>
+          <h2 style={{ marginTop: 0, fontSize: '1.25rem' }}>Mochilas Seleccionadas</h2>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.2rem' }}>
             {cartItems.map((item) => (
-              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.92rem' }}>
+              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.92rem' }}>
                 <span>
                   {item.cantidad}x {item.nombre}
                 </span>
@@ -141,13 +162,15 @@ export default function Checkout({ cartItems, onClearCart }) {
               </div>
             ))}
           </div>
+
           <hr style={{ borderColor: 'var(--border-subtle)' }} />
+
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: '800', marginTop: '1rem' }}>
             <span>Total Final:</span>
             <span style={{ color: 'var(--primary)' }}>${totalCLP.toLocaleString('es-CL')} CLP</span>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
