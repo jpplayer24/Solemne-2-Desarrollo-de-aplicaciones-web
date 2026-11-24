@@ -41,7 +41,10 @@ export function useCart() {
       if (existingIndex > -1) {
         // Si existe, acumulamos la cantidad
         const updated = [...prevItems];
-        updated[existingIndex].cantidad += quantityToAdd;
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          cantidad: updated[existingIndex].cantidad + quantityToAdd,
+        };
         return updated;
       } else {
         // Si es nuevo, agregamos el snapshot básico del producto
@@ -103,7 +106,7 @@ export function useCart() {
         'http://localhost:8000/api/comercio/carrito/fusionar/',
         { items_anonimos: anonymousItems },
         {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Token ${token}` }
         }
       );
 

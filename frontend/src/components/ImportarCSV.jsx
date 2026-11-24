@@ -49,7 +49,7 @@ export default function ImportarCSV() {
       const token = localStorage.getItem('token');
       const headers = { 'Content-Type': 'multipart/form-data' };
       if (token && !token.startsWith('simulated_')) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers['Authorization'] = `Token ${token}`;
       }
 
       const { data } = await axios.post(ENDPOINT_CSV, formData, { headers });

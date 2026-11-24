@@ -14,7 +14,7 @@ export default function ConfirmacionOrden() {
     // Consulta al endpoint protegido de Django REST Framework
     axios
       .get(`http://localhost:8000/api/comercio/ordenes/${ordenId}/`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Token ${token}` },
       })
       .then((res) => {
         setOrden(res.data);
