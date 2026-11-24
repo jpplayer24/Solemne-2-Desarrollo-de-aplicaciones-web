@@ -1,12 +1,22 @@
-
+// ============================================================================
+// Base de datos local de 50 Mochilas con galería coherente por producto
+// ============================================================================
 
 const imagenesBase = [
-  'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1581605405669-fcdf81165afa?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1577733966973-d680bffd2e80?auto=format&fit=crop&w=600&q=80',
-  'https://images.unsplash.com/photo-1491637639811-60e2756cc1c7?auto=format&fit=crop&w=600&q=80'
+  'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1581605405669-fcdf81165afa?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1546938576-6e6a64f317cc?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1577733966973-d680bffd2e80?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1491637639811-60e2756cc1c7?auto=format&fit=crop&w=800&q=80'
+];
+
+// Genera 4 vistas coherentes de la misma imagen (completa y recortes de detalle)
+const generarGaleriaMismaMochila = (urlImagen) => [
+  urlImagen,
+  `${urlImagen}&crop=top&h=600`,
+  `${urlImagen}&crop=bottom&h=600`,
+  `${urlImagen}&crop=faces,entropy&h=600`
 ];
 
 const categoriasConfig = [
@@ -33,12 +43,12 @@ const mochilasIniciales = [
     stock_fisico: 12,
     stock_reservado: 2,
     badge: 'Más Vendida',
-    imagenes: [imagenesBase[0], imagenesBase[1], imagenesBase[2], imagenesBase[3]],
+    imagenes: generarGaleriaMismaMochila(imagenesBase[0]),
     alt_imagenes: [
-      'Vista frontal de la Mochila Trekking 65L Andina en tela oscura impermeable con bolsillo frontal con cierre',
-      'Detalle lateral de las correas de compresión y acolchado lumbar de la Mochila Trekking 65L Andina',
-      'Compartimento superior y costuras reforzadas Ripstop de la Mochila Trekking 65L Andina',
-      'Vista trasera mostrando el sistema de ventilación de espalda y tirantes ergonómicos de 65 litros'
+      'Vista frontal completa de la Mochila Trekking 65L Andina',
+      'Detalle superior de asa reforzada y compartimento principal de la Mochila Trekking 65L Andina',
+      'Detalle inferior de bolsillo frontal y base resistente de la Mochila Trekking 65L Andina',
+      'Enfoque de textura y costuras selladas de la Mochila Trekking 65L Andina'
     ]
   },
   {
@@ -51,12 +61,12 @@ const mochilasIniciales = [
     stock_fisico: 18,
     stock_reservado: 1,
     badge: 'Impermeable',
-    imagenes: [imagenesBase[1], imagenesBase[2], imagenesBase[4], imagenesBase[0]],
+    imagenes: generarGaleriaMismaMochila(imagenesBase[1]),
     alt_imagenes: [
-      'Vista frontal minimalista de la Mochila Urbana Stealth 25L con acabado mate resistente al agua',
-      'Apertura del compartimento acolchado para computador portátil de hasta 16 pulgadas',
-      'Detalle de cierres estancos y bolsillo oculto antirrobo de la Mochila Urbana Stealth 25L',
-      'Vista de perfil mostrando las correas ajustables acolchadas para uso diario en ciudad'
+      'Vista frontal completa de la Mochila Urbana Stealth 25L',
+      'Detalle superior de cierres y compartimento para laptop de la Mochila Urbana Stealth 25L',
+      'Detalle inferior y bolsillo frontal de acceso rápido de la Mochila Urbana Stealth 25L',
+      'Acercamiento al acabado mate impermeable de la Mochila Urbana Stealth 25L'
     ]
   }
 ];
@@ -70,21 +80,6 @@ const mochilasGeneradas = Array.from({ length: 48 }, (_, index) => {
   const imgPrincipal = imagenesBase[index % imagenesBase.length];
   const nombreCompleto = `${config.prefijo} ${litros}L ${sufijo}`;
 
-  const galeria = [
-    imgPrincipal,
-    imagenesBase[(index + 1) % imagenesBase.length],
-    imagenesBase[(index + 2) % imagenesBase.length],
-    imagenesBase[(index + 3) % imagenesBase.length]
-  ];
-
-  // Generamos 4 descripciones alt únicas por producto para cumplir WCAG 1.1.1
-  const descripcionesAlt = [
-    `Vista frontal principal de ${nombreCompleto}, capacidad de ${litros} litros para ${config.cat.toLowerCase()}`,
-    `Detalle lateral y correas de ajuste reforzadas de ${nombreCompleto}`,
-    `Vista interior de los compartimentos organizadores y cierres sellados de ${nombreCompleto}`,
-    `Respaldo ergonómico acolchado y tirantes respirables de ${nombreCompleto}`
-  ];
-
   return {
     id: `mochila-${config.tipo.toLowerCase()}-${litros}l-${num}`,
     nombre: nombreCompleto,
@@ -95,8 +90,13 @@ const mochilasGeneradas = Array.from({ length: 48 }, (_, index) => {
     stock_fisico: 5 + (index % 15),
     stock_reservado: index % 3,
     badge: config.badge,
-    imagenes: galeria,
-    alt_imagenes: descripcionesAlt
+    imagenes: generarGaleriaMismaMochila(imgPrincipal),
+    alt_imagenes: [
+      `Vista frontal completa de ${nombreCompleto} (${litros}L)`,
+      `Detalle superior y asa de transporte de ${nombreCompleto}`,
+      `Detalle inferior y compartimento frontal de ${nombreCompleto}`,
+      `Acercamiento a la tela y terminaciones de ${nombreCompleto}`
+    ]
   };
 });
 
