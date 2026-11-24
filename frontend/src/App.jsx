@@ -21,6 +21,7 @@ import ImportarCSV from './components/ImportarCSV';
 
 // Importamos nuestro hook personalizado del carrito
 import { useCart } from './hooks/useCart';
+import GestionUsuarios from './components/GestionUsuarios';
 
 import { LISTA_MOCHILAS } from './data/mochilasData';
 
