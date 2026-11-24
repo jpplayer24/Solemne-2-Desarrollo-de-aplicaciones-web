@@ -1,3 +1,7 @@
+// ============================================================================
+// Maneja la autenticación de clientes y administradores con conexión a Django
+// y respaldo local (cuentas de prueba y validación de usuarios bloqueados)
+// ============================================================================
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -10,47 +14,81 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Actualiza el estado cada vez que el usuario escribe en los campos
   const manejarCambio = (e) => {
     const { name, value } = e.target;
     setCredenciales({ ...credenciales, [name]: value });
   };
 
+  // Procesa el envío del formulario de inicio de sesión
   const manejarEnvio = async (e) => {
     e.preventDefault();
     setEstado(null);
     setCargando(true);
 
+    const correoIngresado = credenciales.email.trim().toLowerCase();
+
+    // Revisamos si la cuenta fue bloqueada previamente desde el Panel de Administración (RF-08 / RB-06)
+    const usuariosGuardados = JSON.parse(localStorage.getItem('dreamhub_usuarios') || '[]');
+    const usuarioRegistrado = usuariosGuardados.find(
+      (u) => u.email.toLowerCase() === correoIngresado
+    );
+
+    if (usuarioRegistrado && usuarioRegistrado.bloqueado) {
+      setEstado('Cuenta bloqueada. Comuníquese con administración.');
+      setCargando(false);
+      return;
+    }
+
     try {
-      const respuesta = await axios.post('/api/auth/login/' , {
+      // Intento de autenticación real contra el servidor Django REST Framework
+      const respuesta = await axios.post('/api/auth/login/', {
         username: credenciales.email,
         password: credenciales.password,
       });
+
       const data = respuesta.data;
       localStorage.setItem('token', data.token);
+      localStorage.setItem('user_email', correoIngresado);
 
       const rol = data.is_staff ? 'ADMIN' : 'CLIENTE';
       localStorage.setItem('role', rol);
 
+      // Si es administrador va directo a /admin; si es cliente vuelve a la página de origen
       const rutaOrigen = location.state?.from?.pathname || '/';
       const destino = rol === 'ADMIN' ? '/admin' : rutaOrigen;
-      navigate(destino, {replace: true});
+      navigate(destino, { replace: true });
 
     } catch (error) {
+      // Si el servidor backend no responde, usamos las cuentas de prueba locales
       if (!error.response) {
-        if (credenciales.email === 'admin@dreamhub.cl' && credenciales.password === 'admin123') {
+        if (correoIngresado === 'admin@dreamhub.cl' && credenciales.password === 'admin123') {
           localStorage.setItem('token', 'simulated_admin_jwt_token');
           localStorage.setItem('role', 'ADMIN');
+          localStorage.setItem('user_email', 'admin@dreamhub.cl');
           navigate('/admin', { replace: true });
           return;
         }
-        if (credenciales.email === 'cliente@dreamhub.cl' && credenciales.password === 'cliente123') {
+
+        if (correoIngresado === 'cliente@dreamhub.cl' && credenciales.password === 'cliente123') {
           localStorage.setItem('token', 'simulated_client_jwt_token');
           localStorage.setItem('role', 'CLIENTE');
+          localStorage.setItem('user_email', 'cliente@dreamhub.cl');
           const rutaOrigen = location.state?.from?.pathname || '/';
           navigate(rutaOrigen, { replace: true });
           return;
         }
-        setEstado('Error: No se pudo conectar con el servidor backend (DRF).');
+
+        if (correoIngresado === 'clienteb@dreamhub.cl' && credenciales.password === 'cliente123') {
+          localStorage.setItem('token', 'simulated_client_b_jwt_token');
+          localStorage.setItem('role', 'CLIENTE');
+          localStorage.setItem('user_email', 'clienteb@dreamhub.cl');
+          const rutaOrigen = location.state?.from?.pathname || '/';
+          navigate(rutaOrigen, { replace: true });
+          return;
+        }
+
+        setEstado('Error: No se pudo conectar con el servidor backend (DRF) o credenciales incorrectas.');
       } else if (error.response.status === 401 || error.response.status === 400) {
         setEstado(error.response.data?.error || 'Credenciales inválidas o cuenta inactiva.');
       } else if (error.response.status === 403) {
@@ -98,13 +136,13 @@ export default function Login() {
       <form onSubmit={manejarEnvio} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
           <label htmlFor="email" style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)' }}>
-            Nombre de Usuario
+            Nombre de Usuario o Correo
           </label>
           <input
             type="text"
             id="email"
             name="email"
-            placeholder="Ingresa tu nombre de usuario"
+            placeholder="Ingresa tu usuario o correo"
             value={credenciales.email}
             onChange={manejarCambio}
             required
@@ -120,7 +158,7 @@ export default function Login() {
             type="password"
             id="password"
             name="password"
-            placeholder="••••••••"
+            placeholder="********"
             value={credenciales.password}
             onChange={manejarCambio}
             required
@@ -138,18 +176,23 @@ export default function Login() {
         </button>
       </form>
 
+      {/* Mensaje de error accesible para lectores de pantalla */}
       {estado && (
-        <div style={{
-          marginTop: '1.5rem',
-          padding: '0.75rem',
-          borderRadius: 'var(--radius-sm)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.25)',
-          color: '#ef4444',
-          fontSize: '0.85rem',
-          textAlign: 'center',
-          fontWeight: '500'
-        }}>
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{
+            marginTop: '1.5rem',
+            padding: '0.75rem',
+            borderRadius: 'var(--radius-sm)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            color: '#ef4444',
+            fontSize: '0.85rem',
+            textAlign: 'center',
+            fontWeight: '500'
+          }}
+        >
           {estado}
         </div>
       )}
